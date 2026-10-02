@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0b1013" />
+    <meta
+      name="description"
+      content="LAST ZONE - a single-player 3D battle royale built with Three.js."
+    />
+    <title>LAST ZONE</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  </head>
+  <body>
+    <!-- The single WebGL surface for the game. Owned by render/RendererSystem. -->
+    <canvas id="game-canvas" aria-label="LAST ZONE game viewport"></canvas>
+
+    <!-- All runtime UI (HUD, menus, touch controls) is mounted here by ui/ modules. -->
+    <div id="ui-root"></div>
+
+    <!-- Shown until the first frame is rendered, then removed by ui/LoadingScreen.js -->
+    <div id="boot" class="boot">
+      <div class="boot__inner">
+        <h1 class="boot__title">LAST<span>ZONE</span></h1>
+        <p class="boot__tagline">Single-player battle royale &middot; foundation build</p>
+        <p class="boot__status" id="boot-status">Starting engine&hellip;</p>
+      </div>
+    </div>
+
+    <noscript>
+      <div class="fatal">
+        <h1>JavaScript required</h1>
+        <p>LAST ZONE is a WebGL game and needs JavaScript enabled to run.</p>
+      </div>
+    </noscript>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
