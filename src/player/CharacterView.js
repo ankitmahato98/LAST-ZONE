@@ -11,6 +11,9 @@ import { clamp, damp, dampAngle } from '../utils/math.js';
  * animation (`_animate`) - everything else (repo, config, service name) stays.
  *
  * This system only *reads* the player state; it never writes simulation data.
+ * Two optional extras come from the combat service (if it is present): the aim
+ * blend, which steadies the arms so the weapon points where the player aims, and
+ * the elimination state, which tips the body over.
  */
 export class CharacterView {
   constructor({ name = 'avatar', colors = null } = {}) {
@@ -25,6 +28,8 @@ export class CharacterView {
     this.walkWeight = 0;
     this.airWeight = 0;
     this.materials = [];
+    /** Set by combat: the body drops to the ground when eliminated. */
+    this.downed = false;
   }
 
   // ------------------------------------------------------------- lifecycle --
@@ -43,6 +48,17 @@ export class CharacterView {
 
     this.player?.controller?.events.on('jump', () => this._onJump());
     this.player?.controller?.events.on('land', (payload) => this._onLand(payload));
+
+    // Combat feedback that belongs to the body, not the HUD.
+    this.combat = game.services.get('combat');
+    this._unsubscribe = [
+      game.bus.on('combat:player:eliminated', () => {
+        this.downed = true;
+      }),
+      game.bus.on('combat:player:restored', () => {
+        this.downed = false;
+      }),
+    ];
   }
 
   /** Bounce the model on take off / impact - purely cosmetic. */
@@ -237,21 +253,32 @@ export class CharacterView {
     const breathe = Math.sin(idleTime * 1.6) * 0.02 * (1 - this.walkWeight);
     const idleArm = Math.sin(idleTime * 1.4) * 0.05 * (1 - this.walkWeight);
 
+    // Aiming steadies the upper body: the weapon has to point where the player
+    // is aiming, so the arm swing is damped out as the aim blend rises.
+    const aim = this.downed ? 0 : this.combat?.aimBlend ?? 0;
+    const armSteady = 1 - aim * 0.85;
+
     // --- airborne --------------------------------------------------------
     const airborne = this.airWeight;
     const rising = clamp(view.velocity.y / 7, -1, 1);
 
     this.legs.left.joint.rotation.x = -swing + airborne * (-0.45 - rising * 0.2);
     this.legs.right.joint.rotation.x = swing + airborne * (0.35 + rising * 0.15);
-    this.arms.left.joint.rotation.x = swing * 0.9 + idleArm + airborne * (-0.5 - rising * 0.5);
-    this.arms.right.joint.rotation.x = -swing * 0.9 - idleArm + airborne * (-0.5 - rising * 0.5);
+    this.arms.left.joint.rotation.x =
+      (swing * 0.9 + idleArm) * armSteady + airborne * (-0.5 - rising * 0.5);
+    this.arms.right.joint.rotation.x =
+      (-swing * 0.9 - idleArm) * armSteady - aim * 1.15 + airborne * (-0.5 - rising * 0.5);
     this.arms.left.joint.rotation.z = 0.06 + airborne * 0.35;
-    this.arms.right.joint.rotation.z = -0.06 - airborne * 0.35;
+    this.arms.right.joint.rotation.z = -0.06 - airborne * 0.35 + aim * 0.3;
 
     // --- torso lean + vertical bob ---------------------------------------
-    const lean = speedRatio * 0.14 * this.walkWeight + airborne * 0.1;
+    const lean = speedRatio * 0.14 * this.walkWeight * (1 - aim) + airborne * 0.1;
     this.hips.rotation.x = lean;
     this.neck.rotation.x = -lean * 0.7;
+
+    // --- elimination: the body drops -------------------------------------
+    const tilt = this.downed ? -Math.PI / 2 : 0;
+    this.model.rotation.x = damp(this.model.rotation.x, tilt, 6, dt);
 
     const bob = Math.abs(Math.sin(this.walkPhase)) * 0.045 * this.walkWeight;
 
@@ -273,6 +300,8 @@ export class CharacterView {
   }
 
   dispose() {
+    for (const off of this._unsubscribe ?? []) off();
+    this._unsubscribe = [];
     this.root.parent?.remove(this.root);
     this.root.traverse((child) => child.geometry?.dispose?.());
     for (const material of this.materials) material.dispose();

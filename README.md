@@ -4,7 +4,9 @@
 
 **A single-player 3D battle royale built with Three.js.**
 
-Foundation release: renderer, procedural world, third-person controller and a device-agnostic input layer.
+Current build: renderer, procedural world, third-person controller, a device-agnostic input layer
+and a **third-person combat prototype** (one rifle, hitscan, ammo, reload, health, elimination and
+training dummies).
 
 `npm install` → `npm run dev` → open the printed URL → press **Deploy**.
 
@@ -14,10 +16,10 @@ Foundation release: renderer, procedural world, third-person controller and a de
 
 ## What this build is
 
-This is the **foundation** of the game, not a finished match. It ships a runnable
-world you can immediately run, jump and explore in, plus the architecture that
-weapons, loot, inventory, the shrinking zone, a lobby and (later) multiplayer
-plug into without a rewrite.
+This is a **playable prototype**, not a finished match. It ships a world you can
+run, jump and shoot in, plus the architecture that further weapons, loot,
+inventory, the shrinking zone, a lobby and (later) multiplayer plug into without
+a rewrite.
 
 **Included**
 
@@ -28,14 +30,17 @@ plug into without a rewrite.
 | Player | Third-person kinematic controller: walk/sprint/strafing, jump with coyote time and jump buffering, step-up onto ledges, slope limits, wall sliding, capsule-vs-box/cylinder collision |
 | Camera | Damped orbit camera with collision (never clips through the ground or walls), zoom, sprint FOV kick |
 | Character | Stylised humanoid assembled from primitives with a hand-authored rig (walk cycle, sprint lean, air pose, landing squash) |
+| Combat | Data-driven rifle (automatic, 8.5 rps, 30-round magazine), hitscan hit detection against actors *and* world geometry, damage falloff, headshots, spread that reacts to movement/aim/sustained fire, recoil that kicks the camera, tracers, muzzle flash and bullet impacts |
+| Health | A reusable `Health` pool + `Damageable` hitboxes: player and dummies share one code path; fall damage, spawn protection and an elimination state that locks control |
+| Targets | Eight training dummies around the arena with health bars, hit flashes, a fall-over death and automatic rebuild |
 | Input | One `intent` object fed by keyboard, mouse (pointer lock *or* drag fallback) and multi-touch controls - gameplay never knows which device is talking |
-| UI | Deploy/pause menu, HUD with crosshair and adaptive control hints, on-screen touch stick + jump/sprint/pause buttons, F3 debug overlay |
-| Engineering | Fixed-timestep simulation decoupled from rendering, service registry, event bus, 34 automated tests (world, movement, end-to-end boot) |
+| UI | Deploy/pause menu, dynamic reticle that tracks weapon spread, health/ammo/reload readouts, hit markers, damage vignette, elimination banner, adaptive control hints, on-screen touch stick + fire/jump/aim/run/reload/pause buttons, F3 debug overlay |
+| Engineering | Fixed-timestep simulation decoupled from rendering, service registry, event bus, 95 automated tests (world, movement, combat, and end-to-end boot + combat playthroughs under jsdom) |
 
-**Not included yet** (by design, so the foundation stays reviewable):
-weapons, shooting, loot, inventory, the shrinking zone, bots, match flow,
+**Not included yet** (by design, so the build stays reviewable):
+further weapons, loot, inventory, the shrinking zone, bots, match flow,
 audio, and **no multiplayer of any kind**. There are no stubs or dead
-placeholder systems for these - the extension points are real and documented
+placeholder systems for those - the extension points are real and documented
 below.
 
 ---
@@ -75,11 +80,18 @@ used, and the game runs entirely offline.
 | Sprint | `Shift` |
 | Jump | `Space` |
 | Look | Mouse - click the view once to capture the cursor (pointer lock); `Esc` releases it |
+| **Fire** | **Left mouse button** (hold for automatic fire) or `F` |
+| **Aim down sights** | **Right mouse button** (hold) or `Q` |
+| **Reload** | `R` (also happens automatically when the magazine runs dry) |
 | Look without a mouse | `I` `K` pitch, `J` `L` yaw |
 | Zoom | Mouse wheel |
 | Pause / menu | `Esc` |
 | Debug overlay | `F3` |
+| Take 25 damage (test the hurt/elimination feedback) | `H` |
 | Toggle the touch pad | `T` |
+
+Aiming pulls the camera over the shoulder, zooms the field of view, tightens the
+crosshair and lets you strafe while keeping the weapon pointed at the reticle.
 
 If pointer lock is unavailable (embedded iframes, some kiosks), the game
 automatically falls back to **drag to look** - hold the left mouse button and
@@ -90,7 +102,10 @@ drag.
 | Action | Gesture |
 | --- | --- |
 | Move | Drag anywhere in the lower-left half - a floating stick appears under your thumb |
-| Look | Drag anywhere in the right half |
+| Look / aim | Drag anywhere in the right half |
+| **Fire** | **`Fire` button** (hold for automatic fire, tap for a single shot) |
+| **Aim** | `Aim` button (tap to toggle) |
+| **Reload** | `Reload` button (tap) |
 | Jump | `Jump` button (hold to jump again on landing) |
 | Sprint | `Run` button (tap to toggle) |
 | Pause | ⏸ button, top right |
@@ -121,6 +136,18 @@ LAST-ZONE/
 │   │   ├── KeyboardBindings.js# key code -> action binding table
 │   │   ├── PointerLook.js     # pointer lock + drag fallback
 │   │   └── TouchControls.js   # virtual stick, look area, action buttons
+│   ├── combat/
+│   │   ├── CombatSystem.js    # the glue: intent -> weapon -> trace -> damage -> events
+│   │   ├── Hitscan.js         # pure ray/shape hit detection (no three.js)
+│   │   ├── Health.js          # reusable hit-point pool with events
+│   │   ├── Damageable.js      # id + live position + cylinder hitbox + health
+│   │   ├── Target.js          # training dummies + the target system
+│   │   ├── CombatEffects.js   # pooled tracers, muzzle flash, impacts
+│   │   └── weapons/
+│   │       ├── Weapon.js      # magazine/cooldown/reload/spread state machine
+│   │       ├── WeaponTypes.js # registry: definitions -> weapon instances
+│   │       ├── WeaponModels.js# procedural weapon meshes (+ `muzzle` node)
+│   │       └── WeaponView.js  # hip/aim/recoil posing on the character
 │   ├── physics/Collider.js    # oriented boxes, cylinders, height field, push-out
 │   ├── world/
 │   │   ├── Terrain.js         # analytic height field + vertex-coloured mesh
@@ -141,8 +168,9 @@ LAST-ZONE/
 │   ├── ui/
 │   │   ├── LoadingScreen.js   # boot overlay + shader warm-up
 │   │   ├── MenuSystem.js      # deploy/pause menu
-│   │   ├── HudSystem.js       # crosshair, brand, control hints
-│   │   └── DebugOverlay.js    # F3 readout
+│   │   ├── HudSystem.js       # brand mark + adaptive control hints
+│   │   ├── CombatHud.js       # reticle, health, ammo, hit markers, banner
+│   │   └── DebugOverlay.js    # F3 readout (movement + combat telemetry)
 │   ├── utils/                 # math, seeded RNG, value noise, DOM helpers
 │   └── styles/main.css        # UI design system
 └── tests/                     # node:test suites + jsdom/headless helpers
@@ -200,6 +228,61 @@ intent.active  // 'keyboard' | 'touch'
 touches the DOM, the scene graph or a device. That is what makes bots, replays
 and network-driven pawns possible later without touching movement code.
 
+### Combat
+
+Combat is layered so that adding a weapon never means touching the shooting code:
+
+```
+ intent (primary/aim/reload)          input/InputSystem.js
+        |
+        v
+ Weapon            magazine, cooldown, reload timer, spread, falloff
+        |
+        v
+ Hitscan           ray vs. actor cylinders + world collider  (pure math)
+        |
+        v
+ Damageable/Health damage, death, events
+        |
+        v
+ CombatSystem      drives the above, publishes bus events
+        |
+        +--> CombatEffects   tracer, muzzle flash, impact spark  (pooled, no GC)
+        +--> WeaponView      hip/aim/recoil pose on the character
+        +--> CombatHud       reticle, health, ammo, hit markers, banner
+```
+
+Two decisions worth knowing:
+
+* **Shots are traced from the camera and drawn from the muzzle.** Tracing from the
+  muzzle would make the impact point disagree with the reticle up close; drawing
+  from the muzzle keeps the tracer honest with the weapon model.
+* **The player is a `Damageable` too.** Bot weapons (later) can shoot the player
+  through exactly the same code path this build uses for dummies.
+
+### Adding a weapon
+
+1. Add an entry to `WEAPONS` in `src/config/settings.js`:
+
+   ```js
+   shotgun: {
+     id: 'shotgun', name: 'Breacher', kind: 'hitscan',
+     automatic: false, damage: 9, headshotMultiplier: 1.5, fireRate: 1.2,
+     magazineSize: 6, reserveAmmo: 42, reloadTime: 2.6, range: 45,
+     pellets: 8,                       // already supported by the fire loop
+     spread: { standing: 0.05, moving: 0.07, aiming: 0.04, perShot: 0, max: 0.08, recovery: 3 },
+     recoil: { vertical: 0.03, horizontal: 0.012 },
+     muzzle: { x: 0.19, y: 1.29, z: -0.62 },
+     model: 'rifle',
+   }
+   ```
+2. (Optional) add a builder for a new `model` in `combat/weapons/WeaponModels.js`
+   that returns a group with a child named `muzzle`.
+3. Call `combat.equipWeapon('shotgun')` - for example from a future loot pickup.
+
+That is the whole change; `tests/combat-e2e.test.js` proves it by registering and
+firing a brand new weapon without touching a single combat source file.
+
 ### World generation
 
 Terrain height is an analytic function of `(x, z)`:
@@ -228,6 +311,11 @@ PLAYER.maxSlope     // 0.62 (~32 deg) - steeper terrain blocks movement
 CAMERA.distance / sensitivity / limits
 BINDINGS            // key code -> action table (remappable at runtime)
 QUALITY.desktop / QUALITY.mobile   // pixel ratio, shadow map, prop counts
+
+WEAPONS.rifle       // damage, fire rate, magazine, reload, spread, recoil, model
+HEALTH              // player max health, fall damage, spawn protection
+COMBAT              // range, falloff, recoil ceiling, effect lifetimes, aim feel
+TARGETS             // how many training dummies, where, how tough
 ```
 
 Quality is picked from the device (`?quality=mobile|desktop` forces one).
@@ -248,11 +336,22 @@ npm test
 * `tests/movement.test.js` - walking/sprinting/strafing, stopping, jump apex,
   **jump buffering**, walls and wall sliding, stepping up platforms, jumping onto
   a crate, cylinder collision, character facing, steep slopes blocking movement.
+* `tests/combat.test.js` - the combat primitives in isolation: health pools and
+  death events, hitbox maths, ray/sphere/cylinder/box intersection, world rays
+  and surface normals, cover blocking shots, spread cones, magazine/cooldown/
+  reload/spread/damage-falloff weapon behaviour, weapon registration, dummy
+  damage-death-rebuild, weapon view posing and pooled effects.
 * `tests/game.test.js` - end-to-end: boots the real `createGame()` wiring under
   jsdom with a headless renderer, then drives it with synthetic keyboard and
   pointer events (menu, WASD, sprint, jump, camera drag/zoom, virtual stick,
   touch look, pause, respawn, debug overlay) and asserts the player never ends up
   inside geometry.
+* `tests/combat-e2e.test.js` - combat through the *real* game, using only player
+  entry points: pointer-lock mouse fire, `F` key fire, aiming, recoil, reload
+  (key + button), auto-reload on empty, fire-rate measurement, headshots,
+  kills and dummy rebuilds, cover, the elimination flow and respawn, the combat
+  HUD readouts, mobile fire/aim/reload buttons, and a 20 second soak of mixed
+  input that must not throw.
 
 The headless renderer is injected through `createGame({ rendererFactory })`, so
 tests exercise the same wiring the browser uses - only the GPU is replaced.
@@ -266,13 +365,15 @@ point, not a stub:
 
 | Feature | Where it goes |
 | --- | --- |
-| **Weapons** | New `src/weapons/WeaponSystem.js` added to `engine.js`; read `intent.primaryHeld` (already wired from mouse/stick buttons) and use the camera's forward vector; hit detection can use `world.collider` plus `THREE.Raycaster`. |
-| **Loot** | `WorldSystem` already owns runtime map mutation: spawn `LootContainer` objects into `worldGroup`, register their colliders with the same `Collider`, and publish `loot:spawned` on the bus for the UI. |
-| **Inventory** | Register an `inventory` service; the HUD mounts its own widget into `#ui-root` and subscribes to its events. `CharacterView` can attach a held-item bone to `this.arms.right`. |
-| **Shrinking zone** | New `src/world/ZoneSystem.js` using `lateFixedUpdate` (it already runs after movement) to apply damage/area checks; render the ring as a shader-less mesh and update the fog/light tint through `SceneEnvironment`. |
+| **More weapons** | Data only: see "Adding a weapon" above. A `Loadout`/`WeaponSystem` would sit next to `CombatSystem` and call `equipWeapon()`. |
+| **Projectiles** | `Weapon.type.kind` is already read from data. A `ProjectileSystem` can reuse `Damageable`, the same damage/event helpers and `CombatEffects` for the trail. |
+| **Loot** | `WorldSystem` already owns runtime map mutation: spawn `LootContainer` objects into `worldGroup`, register their colliders with the same `Collider`, and call `combat.equipWeapon()` / `weapon.addReserve()` on pickup. |
+| **Inventory** | Register an `inventory` service; the HUD mounts its own widget into `#ui-root` and subscribes to its events. `CharacterView` already has a right-hand attach point for held items. |
+| **The zone** | New `src/world/ZoneSystem.js` using `lateFixedUpdate` to apply area damage via `combat.damagePlayer()` - the same entry point fall damage uses - and update the fog/light tint through `SceneEnvironment`. |
+| **Bots** | Give them a `PlayerController`, a `Damageable` and a `Weapon`: hit detection, damage and death already work against any registered damageable. |
 | **Lobby / match flow** | Replace `MenuSystem`'s single `close()` action with a match service that owns spawn selection (`world.sampleSpawn()` already returns validated points) and round timers. |
 | **Multiplayer** | The controller already takes an intent and returns state: feed remote intents into additional `PlayerController` instances (one per peer) and render them with `CharacterView` (its `colors` option exists for team tints). Swap the input source for network snapshots - nothing in movement, camera or rendering assumes a single player. |
-| **Audio** | Subscribe to `player:jump`, `player:land`, `world:ready` and the renderer's context events. |
+| **Audio** | Subscribe to `weapon:fired`, `combat:hit`, `combat:kill`, `player:jump`, `player:land`, `world:ready` and the renderer's context events. |
 
 ---
 
@@ -281,23 +382,26 @@ point, not a stub:
 | Symptom | Fix |
 | --- | --- |
 | Blank screen / boot error | The game needs **WebGL2**. Check `chrome://gpu` or `about:support`; update the browser or enable hardware acceleration. |
-| "Press Deploy" but the cursor stays free | Pointer lock is blocked in embedded frames. The game falls back to **drag to look** - hold the left mouse button. |
+| "Press Deploy" but the cursor stays free | Pointer lock is blocked in embedded frames. The game falls back to **drag to look** - hold the left mouse button. Note that while dragging, a *quick tap* fires and a *drag* looks. |
+| Shots seem to miss | Check the F3 overlay: `spread` grows while moving and after sustained fire. Stand still or aim down sights (`RMB`/`Q`) to tighten it. |
 | Movement feels too fast/slow | Tune `PLAYER.walkSpeed`, `sprintSpeed`, `groundAcceleration` in `src/config/settings.js`. |
 | Low FPS on a phone | Add `?quality=mobile` (or set `QUALITY.mobile`); reduce `shadowMapSize` / `terrainSegments` further. |
 | Dev server not reachable from another device | It already binds `0.0.0.0`; open `http://<your-lan-ip>:5173`. |
 
 Tested in current Chrome, Edge, Firefox and Safari (desktop and mobile) — the
-only requirement is a WebGL2-capable browser.
+only requirement is a WebGL2-capable browser, no accounts, no backend, no
+external APIs.
 
 ---
 
 ## Roadmap
 
-1. **Combat**: weapons, hitscan/projectile handling, damage and downed state.
-2. **Loot & inventory**: world spawns, pickups, hotbar, healing items.
-3. **The zone**: shrinking play area with escalating damage and a minimap.
-4. **Match flow**: lobby, drop-in, timer, placement screen.
-5. **Bots**, then **netcode** (authoritative server, client prediction) on top of
+1. ~~**Combat**: a weapon, hitscan hit detection, ammo, reload, health, elimination.~~ ✅ *(this build)*
+2. **Weapon variety**: a second and third weapon (projectiles, shotgun pellets), weapon switching, pickups.
+3. **Loot & inventory**: world spawns, pickups, hotbar, healing items.
+4. **The zone**: shrinking play area with escalating damage and a minimap.
+5. **Match flow**: lobby, drop-in, timer, placement screen.
+6. **Bots**, then **netcode** (authoritative server, client prediction) on top of
    the intent/state split that already exists.
 
 ## License

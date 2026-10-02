@@ -12,7 +12,9 @@ import { clamp } from '../utils/math.js';
  *   intent.move    { x, y }  -1..1, y = forward, x = strafe right
  *   intent.look    { x, y }  pixels accumulated since the last simulation step
  *   intent.zoom     number   wheel/tap zoom steps
- *   intent.jumpHeld / intent.sprintHeld / intent.jumpQueued(edge)
+ *   intent.jumpHeld / intent.sprintHeld / intent.aimHeld   (held buttons)
+ *   intent.jumpQueued / intent.primaryPressed / intent.reloadPressed (edges)
+ *   intent.primaryHeld   (held: automatic fire, mobile fire button)
  *   intent.active  'keyboard' | 'touch'   (last device that produced input)
  *
  * That indirection is what makes the player controller reusable for a network
@@ -26,8 +28,15 @@ export const InputActions = Object.freeze({
   RIGHT: 'right',
   JUMP: 'jump',
   SPRINT: 'sprint',
+  /** Trigger. Held for automatic fire, edge for single shots. */
   PRIMARY: 'primary',
+  /** Aim down sights / shoulder aim. Held. */
+  AIM: 'aim',
+  /** Manual reload. Edge triggered. */
+  RELOAD: 'reload',
   INTERACT: 'interact',
+  /** Debug-only: hurt me so the damage feedback can be tested in game. */
+  HURT_ME: 'hurtMe',
   TOGGLE_DEBUG: 'toggleDebug',
   TOGGLE_TOUCH: 'toggleTouch',
 });
@@ -73,6 +82,9 @@ export class InputSystem {
       sprintHeld: false,
       jumpQueued: false,
       primaryHeld: false,
+      primaryPressed: false,
+      aimHeld: false,
+      reloadPressed: false,
       active: 'keyboard',
     };
 
@@ -208,6 +220,9 @@ export class InputSystem {
       intent.sprintHeld = false;
       intent.jumpQueued = false;
       intent.primaryHeld = false;
+      intent.primaryPressed = false;
+      intent.aimHeld = false;
+      intent.reloadPressed = false;
       this._held.clear();
       this._pressedQueue.clear();
       this._releasedQueue.clear();
@@ -260,8 +275,12 @@ export class InputSystem {
     intent.zoom = zoom;
     intent.jumpHeld = held.has(InputActions.JUMP);
     intent.sprintHeld = held.has(InputActions.SPRINT);
+    intent.aimHeld = held.has(InputActions.AIM);
     intent.primaryHeld = held.has(InputActions.PRIMARY);
+    // Edges: consumed here so each press is delivered exactly once.
     intent.jumpQueued = this._pressedQueue.has(InputActions.JUMP);
+    intent.primaryPressed = this._pressedQueue.has(InputActions.PRIMARY);
+    intent.reloadPressed = this._pressedQueue.has(InputActions.RELOAD);
     intent.active = this.controlMode;
 
     this._pressedQueue.clear();

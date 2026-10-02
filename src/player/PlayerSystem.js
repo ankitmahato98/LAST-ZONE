@@ -26,6 +26,8 @@ export class PlayerSystem {
     this.fallLimit = fallLimit;
     this.controller = null;
     this.spawnPoint = null;
+    /** Cleared while eliminated or paused: the pawn stops taking input. */
+    this.controllable = true;
   }
 
   async init(game) {
@@ -35,6 +37,13 @@ export class PlayerSystem {
     this.controller = new PlayerController({ world: this.world, config: this.config });
     this.controller.events.on('jump', (payload) => game.bus.emit('player:jump', payload));
     this.controller.events.on('land', (payload) => game.bus.emit('player:land', payload));
+
+    // Combat (or any future system) can take control away without the player
+    // system knowing anything about combat.
+    this._unsubscribe = [
+      game.bus.on('combat:player:eliminated', () => this.setControllable(false)),
+      game.bus.on('combat:player:restored', () => this.setControllable(true)),
+    ];
 
     this.respawn();
   }
@@ -78,7 +87,7 @@ export class PlayerSystem {
     const input = this.game.services.get('input');
     const camera = this.game.services.get('camera3p');
 
-    const intent = input?.intent ?? NEUTRAL_INTENT;
+    const intent = this.controllable ? input?.intent ?? NEUTRAL_INTENT : NEUTRAL_INTENT;
     const yaw = camera?.yaw ?? this.controller.state.yaw;
     this.controller.update(dt, intent, yaw);
 
@@ -90,6 +99,15 @@ export class PlayerSystem {
 
   // ---------------------------------------------------------------- control --
 
+  /** Enables/disables input for this pawn (elimination, cutscenes, pause). */
+  setControllable(controllable) {
+    if (this.controllable === controllable) return this.controllable;
+    this.controllable = controllable;
+    if (!controllable) this.controller.state.velocity.set(0, 0, 0);
+    this.game?.bus.emit('player:controllable', { controllable });
+    return this.controllable;
+  }
+
   /** Places the player at the next validated spawn point. */
   respawn(position = null) {
     const spawn = position ?? this.world.sampleSpawn(this.body, this.spawnTester);
@@ -97,6 +115,11 @@ export class PlayerSystem {
     this.controller.respawn(spawn, this.config.spawnYaw ?? 0);
     this.game?.bus.emit('player:respawn', { position: spawn });
     return spawn;
+  }
+
+  dispose() {
+    for (const off of this._unsubscribe ?? []) off();
+    this._unsubscribe = [];
   }
 
   teleport(x, z, y = null) {

@@ -18,7 +18,12 @@ import { PlayerSystem } from '../player/PlayerSystem.js';
 import { ThirdPersonCamera } from '../player/ThirdPersonCamera.js';
 import { CharacterView } from '../player/CharacterView.js';
 
+import { CombatSystem } from '../combat/CombatSystem.js';
+import { CombatEffects } from '../combat/CombatEffects.js';
+import { TargetSystem } from '../combat/Target.js';
+
 import { HudSystem } from '../ui/HudSystem.js';
+import { CombatHud } from '../ui/CombatHud.js';
 import { LoadingScreen } from '../ui/LoadingScreen.js';
 import { MenuSystem } from '../ui/MenuSystem.js';
 import { DebugOverlay } from '../ui/DebugOverlay.js';
@@ -29,12 +34,17 @@ import { DebugOverlay } from '../ui/DebugOverlay.js';
  * The wiring is spelled out in one place so it stays obvious which system owns
  * what, and where new systems plug in later:
  *
- *   weapons   -> game.addSystem(new WeaponSystem({ ... }))  before the UI
- *   loot      -> world system spawns LootContainers from world/Loot.js
+ *   weapons   -> add an entry to WEAPONS in config + a model builder, then
+ *                `combat.equipWeapon(id)` (or a future WeaponSystem that owns a
+ *                loadout and calls it)
+ *   loot      -> world system spawns LootContainers from world/Loot.js and calls
+ *                `combat.equipWeapon()` / `weapon.addReserve()` on pickup
  *   inventory -> service registry entry, UI panel subscribes to its events
- *   zone      -> game.addSystem(new ZoneSystem())  after the world
+ *   zone      -> game.addSystem(new ZoneSystem()) after the world; it can damage
+ *                the player through `combat.damagePlayer()` like fall damage does
  *   lobby     -> replace MenuSystem's Play action with a lobby handshake
- *   netcode   -> swap PlayerSystem's local intent source for a RemoteIntent
+ *   netcode   -> feed remote intents into extra PlayerController instances; the
+ *                player's own damageable is already registered for hit detection
  *
  * @returns {Promise<{ game: Game, loading: LoadingScreen }>}
  */
@@ -118,8 +128,23 @@ export async function createGame({
   game.services.register('thirdPersonCamera', camera);
   game.services.register('camera3p', camera);
 
+  // --- Combat -----------------------------------------------------------
+  // Order matters: effects and targets exist before the combat system resolves
+  // them, and combat runs after the player/camera so it reads the current frame's
+  // aim direction.
+  const effects = game.addSystem(new CombatEffects());
+  game.services.register('combatEffects', effects);
+
+  const targets = game.addSystem(new TargetSystem({ seed: WORLD.seed }));
+  // TargetSystem registers its own service (`targets`) during init.
+
+  const combat = game.addSystem(new CombatSystem({ seed: WORLD.seed }));
+  game.services.register('combat', combat);
+
   // --- UI ---------------------------------------------------------------
   const hud = game.addSystem(new HudSystem({ uiRoot }));
+  const combatHud = game.addSystem(new CombatHud({ uiRoot }));
+  game.services.register('combatHud', combatHud);
   const debug = game.addSystem(new DebugOverlay({ uiRoot, game }));
   const menu = game.addSystem(new MenuSystem({ uiRoot, pointerLook, touch, input }));
   game.services.register('hud', hud);

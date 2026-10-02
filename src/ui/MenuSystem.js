@@ -87,6 +87,12 @@ export class MenuSystem {
         ['Shift', 'sprint'],
         ['Space', 'jump'],
       ]),
+      group('Combat', [
+        ['LMB / F', 'fire'],
+        ['RMB / Q', 'aim down sights'],
+        ['R', 'reload'],
+        ['H', 'test: take 25 damage'],
+      ]),
       group('Camera', [
         ['Mouse', 'look'],
         ['Wheel', 'zoom'],
@@ -95,8 +101,9 @@ export class MenuSystem {
       group('Touch', [
         ['Left half', 'move'],
         ['Right half', 'look'],
-        ['Run', 'toggle sprint'],
-        ['Jump', 'jump'],
+        ['Fire', 'hold to shoot'],
+        ['Aim / Run', 'toggle'],
+        ['Reload / Jump', 'tap'],
       ]),
       group('System', [
         ['F3', 'debug overlay'],
@@ -108,8 +115,8 @@ export class MenuSystem {
     const note = createElement('p', {
       className: 'panel__note',
       text:
-        'Foundation build: renderer, world, third-person controller and input. ' +
-        'Weapons, loot, inventory, the shrinking zone and multiplayer plug into the same system pipeline.',
+        'Combat prototype: one rifle, hitscan hit detection, ammo, reload and training dummies. ' +
+        'Loot, inventory, the shrinking zone and multiplayer plug into the same system pipeline.',
     });
 
     return createElement('div', { className: 'overlay' }, [

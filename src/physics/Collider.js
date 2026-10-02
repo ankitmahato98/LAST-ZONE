@@ -110,12 +110,16 @@ export class BoxBlocker {
     return true;
   }
 
-  /** True when the circle footprint covers (part of) the box - used for spawns. */
+  /**
+   * True when a circle of `radius` around (x, z) touches the box footprint.
+   * The comparison is inclusive: a radius of 0 means "is this exact point on or
+   * inside the footprint", which is what the ray/point probes need.
+   */
   overlapsFootprint(x, z, radius) {
     const local = this.worldToLocal(x, z);
     const dx = Math.max(Math.abs(local.x) - this.half.x, 0);
     const dz = Math.max(Math.abs(local.z) - this.half.z, 0);
-    return dx * dx + dz * dz < radius * radius;
+    return dx * dx + dz * dz <= radius * radius;
   }
 
   /** Circle-vs-box overlap in 3D, treating the actor as a vertical segment. */

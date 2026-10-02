@@ -34,6 +34,14 @@ export class PlayerController {
       stepHeight: config.stepHeight,
     };
 
+    /**
+     * Aiming down sights turns the character into a strafing turret: it faces
+     * the camera instead of the movement direction and moves slower. Both are
+     * owned by whoever sets them (the combat system), never by the controller.
+     */
+    this.aimMode = false;
+    this.speedScale = 1;
+
     this.state = {
       position: new THREE.Vector3(config.spawn.x, 0, config.spawn.z),
       velocity: new THREE.Vector3(),
@@ -113,7 +121,7 @@ export class PlayerController {
       this.events.emit('jump', { position: st.position, jumps: st.jumps });
     }
 
-    const targetSpeed = st.sprinting ? cfg.sprintSpeed : cfg.walkSpeed;
+    const targetSpeed = (st.sprinting ? cfg.sprintSpeed : cfg.walkSpeed) * this.speedScale;
     const accel = (wasOnGround ? cfg.groundAcceleration : cfg.groundAcceleration * cfg.airControl) * dt;
     // Analog input keeps its magnitude; keyboard/touch sticks are already 1.
     const inputScale = Math.min(1, inputMagnitude);
@@ -157,7 +165,11 @@ export class PlayerController {
     if (landed) this.events.emit('land', { position: st.position, speed: Math.abs(st.velocity.y) });
 
     // --- facing + derived values -----------------------------------------
-    if (moving) {
+    if (this.aimMode) {
+      // While aiming, the body follows the aim direction (camera yaw).
+      const delta = angleDelta(st.yaw, cameraYaw);
+      st.yaw += delta * Math.min(1, cfg.turnLambda * 1.4 * dt);
+    } else if (moving) {
       const targetYaw = Math.atan2(-dirX, -dirZ);
       const delta = angleDelta(st.yaw, targetYaw);
       st.yaw += delta * Math.min(1, cfg.turnLambda * dt);

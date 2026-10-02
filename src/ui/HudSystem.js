@@ -1,11 +1,11 @@
 import { createElement, removeElement } from '../utils/dom.js';
 
 /**
- * Heads-up display: crosshair, brand mark and the control hints.
+ * Base heads-up display: brand mark and the adaptive control hints.
  *
- * Deliberately text-only for now - health, ammo and the kill feed belong to
- * later systems, which can either extend this class or mount their own widget
- * into `#ui-root`. The hints adapt to whichever device was last used.
+ * Health/ammo/reticle live in `ui/CombatHud.js`, which owns the crosshair while
+ * combat is active - this system's static crosshair is hidden in that case
+ * (`setCrosshairVisible(false)`), so there is exactly one reticle on screen.
  */
 export class HudSystem {
   constructor({ uiRoot }) {
@@ -19,8 +19,9 @@ export class HudSystem {
     this.input = game.services.get('input');
 
     this.hintBody = createElement('div', { className: 'hud__hint-body' });
+    this.crosshair = createElement('div', { className: 'hud__crosshair' });
     this.root = createElement('div', { className: 'hud' }, [
-      createElement('div', { className: 'hud__crosshair' }),
+      this.crosshair,
       createElement('div', { className: 'hud__brand' }, [
         createElement('div', { className: 'hud__logo', html: 'LAST<span>ZONE</span>' }),
       ]),
@@ -36,16 +37,27 @@ export class HudSystem {
     if (!this.hintBody) return;
     this.hintBody.innerHTML =
       mode === 'touch'
-        ? 'Left side: move &middot; right side: look &middot; Run toggles sprint.'
+        ? [
+            'Left: move',
+            'Right: look',
+            '<b>Fire</b> / <b>Jump</b> / <b>Aim</b> / <b>Run</b> / <b>Reload</b> buttons',
+          ].join(' &middot; ')
         : [
             '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move',
             '<kbd>Shift</kbd> sprint',
             '<kbd>Space</kbd> jump',
-            '<kbd>Mouse</kbd> look (click to capture)',
+            '<kbd>Mouse</kbd> fire (click the view to capture)',
+            '<kbd>RMB</kbd> aim',
+            '<kbd>R</kbd> reload',
             '<kbd>Wheel</kbd> zoom',
             '<kbd>F3</kbd> debug',
             '<kbd>Esc</kbd> menu',
           ].join(' &middot; ');
+  }
+
+  /** The combat HUD takes over the reticle once weapons are equipped. */
+  setCrosshairVisible(visible) {
+    if (this.crosshair) this.crosshair.style.display = visible ? '' : 'none';
   }
 
   setVisible(visible) {

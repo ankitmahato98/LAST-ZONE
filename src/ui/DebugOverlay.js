@@ -1,4 +1,5 @@
 import { createElement, removeElement } from '../utils/dom.js';
+import { InputActions } from '../input/InputSystem.js';
 
 /**
  * Developer readout (F3, or `?debug=1`).
@@ -25,6 +26,8 @@ export class DebugOverlay {
     this.player = game.services.get('player');
     this.world = game.services.get('world');
     this.camera = game.services.get('camera3p');
+    this.combat = game.services.get('combat');
+    this.targets = game.services.get('targets');
 
     this.content = createElement('div', { className: 'hud__debug' });
     this.root = createElement('div', {}, [this.content]);
@@ -33,7 +36,11 @@ export class DebugOverlay {
 
     this._unsubscribe = [
       this.input?.onActionDown(({ action }) => {
-        if (action === 'toggleDebug') this.toggle();
+        if (action === InputActions.TOGGLE_DEBUG) this.toggle();
+        // Debug damage: exercise the hurt/death feedback without a shooter.
+        if (action === InputActions.HURT_ME) {
+          this.game.bus.emit('debug:damage', { amount: 25, source: 'debug' });
+        }
       }),
       game.bus.on('game:resize', () => this._render(true)),
     ];
@@ -76,6 +83,21 @@ export class DebugOverlay {
       `colliders ${world?.stats.boxes ?? 0} box / ${world?.stats.cylinders ?? 0} cyl`,
       `props ${world?.stats.props.trees ?? 0} trees, ${world?.stats.props.rocks ?? 0} rocks`,
     ];
+
+    const combat = this.combat;
+    if (combat?.weapon) {
+      const ammo = combat.ammo;
+      const stats = combat.stats;
+      lines.push(
+        '',
+        `<b>${combat.weapon.name}</b>  ${ammo.magazine}/${ammo.reserve}${ammo.reloading ? '  RELOADING' : ''}`,
+        `hp ${combat.health.toFixed(0)}/${combat.maxHealth}  ${combat.isEliminated ? 'ELIMINATED' : combat.isProtected ? 'spawn-protected' : 'alive'}`,
+        `spread ${(combat.spread * 1000).toFixed(1)}mrad  aim ${combat.aimBlend.toFixed(2)}  recoil ${this.camera?.recoil?.pitch?.toFixed(4) ?? '-'}`,
+        `shots ${stats.shots}  hits ${stats.hits}  head ${stats.headshots}  kills ${stats.kills}`,
+        `damage dealt ${stats.damageDealt.toFixed(0)}  taken ${stats.damageTaken.toFixed(0)}`,
+        `targets ${this.targets?.aliveCount ?? 0}/${this.targets?.dummies.length ?? 0} standing`,
+      );
+    }
 
     const next = lines.join('\n');
     if (next !== this._text) {

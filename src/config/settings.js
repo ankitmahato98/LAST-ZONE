@@ -129,6 +129,102 @@ export const CAMERA = {
   minCollisionDistance: 1.15,
 };
 
+export const HEALTH = {
+  playerMax: 100,
+  /** Landing faster than this hurts; damage scales with the excess. */
+  fallDamageSpeed: 17,
+  fallDamagePerSpeed: 4.2,
+  /** Grace period after respawning in which nothing can hurt you. */
+  spawnProtection: 1.2,
+  /** Health a respawn restores (also used by targets). */
+  healOnRespawn: true,
+};
+
+export const COMBAT = {
+  /** Hitscan range cap - longer than any weapon's own range. */
+  maxRayDistance: 260,
+  /** Damage falloff: full damage up to `falloffStart`, `minScale` at `falloffEnd`. */
+  falloffStart: 45,
+  falloffEnd: 140,
+  minFalloffScale: 0.45,
+  /** Recoil is applied to the camera and decays back. */
+  maxRecoil: 0.09,
+  recoilRecovery: 9,
+  /** Visual feedback lifetimes (seconds). */
+  tracerLifetime: 0.055,
+  impactLifetime: 3.5,
+  maxImpacts: 28,
+  hitMarkerLifetime: 0.22,
+  /** How long a destroyed target stays down before it is rebuilt. */
+  targetRespawnDelay: 4,
+  /** Aiming (ADS) behaviour for the third person camera + controller. */
+  aim: {
+    fovScale: 0.78,
+    distanceScale: 0.6,
+    shoulderOffset: 0.6,
+    heightOffset: 0.12,
+    moveSpeedScale: 0.45,
+    spreadScale: 0.35,
+    transitionLambda: 14,
+  },
+  /** Where the player may damage-test themselves from the debug overlay. */
+  debugDamageAmount: 25,
+};
+
+/**
+ * Weapon definitions.
+ *
+ * Adding a weapon is a data change: give it an id, ballistics and a `model`
+ * (see combat/weapons/WeaponModels.js). The systems never special case a
+ * weapon name - they read these fields.
+ */
+export const WEAPONS = {
+  rifle: {
+    id: 'rifle',
+    name: 'AR-4 Ranger',
+    /** 'hitscan' today; 'projectile' is a future `kind` with the same interface. */
+    kind: 'hitscan',
+    automatic: true,
+    damage: 24,
+    /** Damage multiplier for hits above `Damageable.headHeightFraction`. */
+    headshotMultiplier: 2,
+    /** Rounds per second. */
+    fireRate: 8.5,
+    magazineSize: 30,
+    reserveAmmo: 210,
+    reloadTime: 1.9,
+    range: 180,
+    /** Spread in radians: base by state, bloom added per shot. */
+    spread: {
+      standing: 0.011,
+      moving: 0.032,
+      aiming: 0.004,
+      perShot: 0.006,
+      max: 0.055,
+      recovery: 3.2,
+    },
+    /** Per-shot camera kick (radians) and how fast it settles. */
+    recoil: {
+      vertical: 0.011,
+      horizontal: 0.0045,
+      recovery: 9,
+    },
+    /** Attach point for the model / muzzle effects, in character space. */
+    muzzle: { x: 0.19, y: 1.29, z: -0.62 },
+    model: 'rifle',
+  },
+};
+
+export const TARGETS = {
+  /** Training dummies scattered around the arena. */
+  count: 8,
+  maxHealth: 100,
+  radius: 0.45,
+  height: 1.75,
+  /** Where dummies may appear: a ring around the spawn pad. */
+  radiusRange: [12, 26],
+};
+
 /** Action -> keyboard code(s). Touch/mouse feed the same actions. */
 export const BINDINGS = {
   forward: ['KeyW', 'ArrowUp'],
@@ -137,6 +233,10 @@ export const BINDINGS = {
   right: ['KeyD'],
   jump: ['Space'],
   sprint: ['ShiftLeft', 'ShiftRight'],
+  primary: ['KeyF'],
+  aim: ['KeyQ'],
+  reload: ['KeyR'],
+  hurtMe: ['KeyH'],
   lookUp: ['KeyI'],
   lookDown: ['KeyK'],
   lookLeft: ['KeyJ'],

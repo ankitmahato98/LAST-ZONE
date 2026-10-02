@@ -86,6 +86,45 @@ export function installDom({ width = 1280, height = 720 } = {}) {
   return { dom, window };
 }
 
+/**
+ * Install a working pointer lock on a jsdom window.
+ *
+ * jsdom has no pointer lock, so `PointerLook` would always fall back to
+ * drag-to-look. Installing a minimal, spec-shaped implementation lets the
+ * desktop mouse path (press to capture, then shoot) be tested for real.
+ */
+export function installPointerLock(window) {
+  const document = window.document;
+  const prototype = window.HTMLElement.prototype;
+
+  prototype.requestPointerLock = function requestPointerLock() {
+    if (this.ownerDocument.pointerLockElement === this) return Promise.resolve();
+    Object.defineProperty(document, 'pointerLockElement', {
+      value: this,
+      configurable: true,
+      writable: true,
+    });
+    document.dispatchEvent(new window.Event('pointerlockchange'));
+    return Promise.resolve();
+  };
+
+  document.exitPointerLock = function exitPointerLock() {
+    Object.defineProperty(document, 'pointerLockElement', {
+      value: null,
+      configurable: true,
+      writable: true,
+    });
+    document.dispatchEvent(new window.Event('pointerlockchange'));
+  };
+
+  Object.defineProperty(document, 'pointerLockElement', {
+    value: null,
+    configurable: true,
+    writable: true,
+  });
+  return window;
+}
+
 /** Dispatch a pointer event with the pointer fields jsdom drops. */
 export function pointer(target, type, params = {}) {
   const view =

@@ -1,4 +1,5 @@
 import { exitPointerLockSafe, requestPointerLockSafe } from '../utils/dom.js';
+import { InputActions } from './InputSystem.js';
 
 /**
  * Mouse look for desktop.
@@ -10,6 +11,11 @@ import { exitPointerLockSafe, requestPointerLockSafe } from '../utils/dom.js';
  *     iframes without `allow="pointer-lock"`, some kiosk browsers). The same
  *     code path then runs off absolute mouse deltas, so the game is always
  *     playable.
+ *
+ * Mouse buttons are mapped the way a shooter expects: left = trigger (held for
+ * automatic fire), right = aim down sights. Like everything else in this layer
+ * they only write actions into the shared input system - combat never sees a
+ * mouse.
  *
  * Sensitivity is *not* applied here: raw pixels go into the intent and the
  * camera applies `config/settings.js` values. That keeps look tuning in one
@@ -36,6 +42,11 @@ export class PointerLook {
     this._onWheel = this._onWheel.bind(this);
     this._onLockChange = this._onLockChange.bind(this);
     this._onContextMenu = (event) => event.preventDefault();
+    // Which button id owns which action, so releases can be matched up.
+    this._buttonActions = new Map([
+      [0, InputActions.PRIMARY],
+      [2, InputActions.AIM],
+    ]);
   }
 
   init(game) {
@@ -51,7 +62,11 @@ export class PointerLook {
 
   setEnabled(enabled) {
     this.enabled = enabled;
-    if (!enabled) this.isDragging = false;
+    if (!enabled) {
+      this.isDragging = false;
+      // Dropping the trigger state avoids a stuck shot when a menu opens.
+      for (const action of this._buttonActions.values()) this.input.release(this.source, action);
+    }
   }
 
   /** Requested by the menu's Play button, or by clicking the canvas. */
@@ -78,6 +93,9 @@ export class PointerLook {
     this._draggingButton = event.button;
     this._last.x = event.clientX;
     this._last.y = event.clientY;
+
+    const action = this._buttonActions.get(event.button);
+    if (action) this.input.press(this.source, action);
 
     // Clicking the game view captures the cursor; if that is not possible we
     // simply keep dragging.
@@ -112,6 +130,10 @@ export class PointerLook {
 
   _onPointerUp(event) {
     if (event.pointerType === 'touch') return;
+
+    const action = this._buttonActions.get(event.button);
+    if (action) this.input.release(this.source, action);
+
     if (event.button === this._draggingButton || this._draggingButton === -1) {
       this.isDragging = false;
     }

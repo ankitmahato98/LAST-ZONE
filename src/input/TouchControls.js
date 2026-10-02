@@ -6,8 +6,12 @@ import { GameEvents } from '../core/events.js';
  * Mobile / tablet controls:
  *  - left half, lower area: floating virtual stick (appears where you touch)
  *  - right half: drag to look
- *  - buttons: jump (hold) and sprint (tap to toggle, like most mobile BRs)
+ *  - buttons: fire (hold for automatic), jump (hold), aim (tap to toggle),
+ *    sprint (tap to toggle) and reload (tap)
  *  - top right: pause
+ *
+ * Every button writes the same `InputActions` the keyboard does, so the combat
+ * and movement code cannot tell which device is in use.
  *
  * The widget only ever calls `input.*` - the exact same API the keyboard uses -
  * so nothing in the simulation layer knows which device is driving it.
@@ -29,6 +33,7 @@ export class TouchControls {
     this.forceVisible = forceVisible;
 
     this.sprinting = false;
+    this.aiming = false;
     this.visible = false;
     this.paused = false;
 
@@ -57,19 +62,41 @@ export class TouchControls {
     this.stickBase = createElement('div', { className: 'touch__stick' }, [this.knob]);
 
     this.jumpButton = createElement('button', {
-      className: 'touch__button touch__button--primary',
+      className: 'touch__button',
       text: 'Jump',
       attrs: { type: 'button', 'aria-label': 'Jump' },
     });
+    this.fireButton = createElement('button', {
+      className: 'touch__button touch__button--primary',
+      text: 'Fire',
+      attrs: { type: 'button', 'aria-label': 'Fire weapon' },
+    });
     this.sprintButton = createElement('button', {
-      className: 'touch__button',
+      className: 'touch__button touch__button--small',
       text: 'Run',
       attrs: { type: 'button', 'aria-label': 'Toggle sprint' },
     });
-    const buttons = createElement('div', { className: 'touch__buttons' }, [
+    this.aimButton = createElement('button', {
+      className: 'touch__button touch__button--small',
+      text: 'Aim',
+      attrs: { type: 'button', 'aria-label': 'Toggle aim' },
+    });
+    this.reloadButton = createElement('button', {
+      className: 'touch__button touch__button--small',
+      text: 'Reload',
+      attrs: { type: 'button', 'aria-label': 'Reload weapon' },
+    });
+
+    const upperRow = createElement('div', { className: 'touch__row' }, [
+      this.reloadButton,
+      this.aimButton,
       this.sprintButton,
-      this.jumpButton,
     ]);
+    const lowerRow = createElement('div', { className: 'touch__row' }, [
+      this.jumpButton,
+      this.fireButton,
+    ]);
+    const buttons = createElement('div', { className: 'touch__buttons' }, [upperRow, lowerRow]);
 
     this.menuButton = createElement('button', {
       className: 'touch__menu',
@@ -106,7 +133,11 @@ export class TouchControls {
     this.lookZone.addEventListener('pointercancel', (e) => this._onLookUp(e));
 
     this._bindHoldButton(this.jumpButton, InputActions.JUMP);
-    this.sprintButton.addEventListener('pointerdown', (e) => this._onSprintTap(e));
+    // Holding fire repeats (automatic weapons); tapping fires a single shot.
+    this._bindHoldButton(this.fireButton, InputActions.PRIMARY);
+    this._bindTapButton(this.reloadButton, InputActions.RELOAD);
+    this.sprintButton.addEventListener('pointerdown', (e) => this._onToggle(e, 'sprinting', this.sprintButton, InputActions.SPRINT));
+    this.aimButton.addEventListener('pointerdown', (e) => this._onToggle(e, 'aiming', this.aimButton, InputActions.AIM));
     this.menuButton.addEventListener('click', () => this.game.services.get('menu')?.togglePause());
 
     // Reveal/hide depending on which device is actually used.
@@ -240,12 +271,24 @@ export class TouchControls {
     element.addEventListener('lostpointercapture', release);
   }
 
-  _onSprintTap(event) {
+  /** Momentary press: fires the action edge, then releases it. */
+  _bindTapButton(element, action) {
+    element.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      element.classList.add('touch__button--active');
+      this.input.press(STICK_SOURCE, action);
+      this.input.release(STICK_SOURCE, action);
+      setTimeout(() => element.classList.remove('touch__button--active'), 120);
+    });
+  }
+
+  /** Latching button: flips a boolean flag and a held action with it. */
+  _onToggle(event, flag, element, action) {
     event.preventDefault();
-    this.sprinting = !this.sprinting;
-    this.sprintButton.classList.toggle('touch__button--active', this.sprinting);
-    if (this.sprinting) this.input.press(STICK_SOURCE, InputActions.SPRINT);
-    else this.input.release(STICK_SOURCE, InputActions.SPRINT);
+    this[flag] = !this[flag];
+    element.classList.toggle('touch__button--active', this[flag]);
+    if (this[flag]) this.input.press(STICK_SOURCE, action);
+    else this.input.release(STICK_SOURCE, action);
   }
 
   /** Drop every piece of state this widget owns. */
@@ -253,12 +296,16 @@ export class TouchControls {
     this._stickPointerId = null;
     this._lookPointerId = null;
     this.sprinting = false;
-    this.sprintButton.classList.remove('touch__button--active');
-    this.jumpButton.classList.remove('touch__button--active');
+    this.aiming = false;
+    for (const button of [this.sprintButton, this.jumpButton, this.aimButton, this.fireButton]) {
+      button?.classList.remove('touch__button--active');
+    }
     this._setKnob(0, 0);
     this.input.setMove(STICK_SOURCE, 0, 0);
     this.input.release(STICK_SOURCE, InputActions.JUMP);
     this.input.release(STICK_SOURCE, InputActions.SPRINT);
+    this.input.release(STICK_SOURCE, InputActions.PRIMARY);
+    this.input.release(STICK_SOURCE, InputActions.AIM);
   }
 
   dispose() {
