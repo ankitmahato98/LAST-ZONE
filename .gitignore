@@ -17,3 +17,47 @@ pnpm-debug.log*
 .vscode/*
 !.vscode/extensions.json
 *.swp
+
+# ---------------------------------------------------------------------------
+# Android signing material - NEVER commit any of this.
+#
+# The release keystore, its passwords and the local Gradle properties file that
+# points at them are all machine-local secrets. CI receives the keystore and its
+# passwords through GitHub Actions secrets and decodes the keystore into a
+# temporary, git-ignored path during the build only.
+# ---------------------------------------------------------------------------
+*.keystore
+*.jks
+*.p12
+*.pepk
+keystore.properties
+android/keystore.properties
+android/app/*.keystore
+android/app/*.jks
+android/release.keystore
+release.keystore
+signing.properties
+
+# Android build output / machine-local configuration
+android/.gradle/
+android/local.properties
+android/build/
+android/app/build/
+android/captures/
+android/.idea/
+.android/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+output-metadata.json
+
+# Capacitor-generated copies of the web build. `npx cap sync android` recreates
+# these from `dist/`, so they are build output rather than source. (The rest of
+# the generated Android plumbing - capacitor.settings.gradle, capacitor.build.gradle,
+# the cordova plugin shim - is committed, exactly as the Capacitor template ships it.)
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+android/app/src/main/res/xml/config.xml

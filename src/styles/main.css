@@ -26,6 +26,11 @@ body {
   padding: 0;
   height: 100%;
   overflow: hidden;
+  /* Android WebView / mobile browsers may resize the visual viewport (URL bar,
+     gesture bar, app switcher); dvh tracks it, and the fixed layers below are
+     inset:0 so they follow automatically. */
+  height: 100dvh;
+  -webkit-text-size-adjust: 100%;
   background: var(--lz-bg);
   color: var(--lz-text);
   font-family: var(--lz-font);
@@ -41,6 +46,11 @@ body {
   display: block;
   touch-action: none;
   cursor: crosshair;
+  /* Android long-press must not select or lift the WebGL surface. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
 }
 
 body[data-touch='true'] #game-canvas {
@@ -247,6 +257,7 @@ body[data-touch='true'] .hud__brand {
 .panel {
   width: min(560px, calc(100vw - 36px));
   max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   overflow: auto;
   padding: 26px 28px;
   border-radius: 16px;

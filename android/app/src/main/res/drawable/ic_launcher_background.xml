@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive icon background layer for LAST ZONE.
+  Deep arena background (#0A1218) with a subtle vertical lift so the mark reads
+  on both light and dark launchers. Kept as a plain vector rect (no gradients) so
+  it renders identically on every supported API level.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#0A1218"
+        android:pathData="M0,0h108v108h-108z" />
+    <path
+        android:fillColor="#0F1A21"
+        android:pathData="M54,8a46,46 0 1,1 -0.01,0z" />
+    <path
+        android:fillColor="#0A1218"
+        android:pathData="M54,22a32,32 0 1,1 -0.01,0z" />
+</vector>

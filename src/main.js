@@ -1,4 +1,5 @@
 import { createGame } from './core/engine.js';
+import { installNativeAppHandlers } from './platform/nativeApp.js';
 import './styles/main.css';
 
 /**
@@ -37,6 +38,10 @@ async function main() {
   game.start();
   setStatus('Ready.');
   await loading.hide();
+
+  // Android APK only: make the hardware Back button pause instead of doing
+  // nothing (or dropping the player straight out of a live match).
+  await installNativeAppHandlers({ menu: game.getSystem('menu') });
 
   game.bus.emit('app:booting-done', { game });
 }

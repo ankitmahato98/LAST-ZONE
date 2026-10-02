@@ -1,0 +1,22 @@
+{
+  "appId": "com.lastzone.game",
+  "appName": "LAST ZONE",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "loggingBehavior": "debug",
+  "android": {
+    "backgroundColor": "#070b0e",
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false,
+    "adjustMarginsForEdgeToEdge": "auto"
+  },
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0
+    }
+  }
+}
