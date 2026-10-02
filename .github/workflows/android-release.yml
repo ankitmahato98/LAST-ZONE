@@ -154,36 +154,61 @@ jobs:
           APK="android/app/build/outputs/apk/release/app-release.apk"
           [ -f "$APK" ] || { echo "::error::Expected signed APK not found at $APK"; exit 1; }
 
+          # On failure, mirror the useful lines into annotations: workflow logs are
+          # not always readable from every client, annotations always are. Only
+          # public APK metadata is echoed - never a secret.
+          annotate_file() {
+            while IFS= read -r line; do echo "::error::    $line"; done < <(grep -E "$1" "$2" || true)
+          }
+
           SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           APKSIGNER="$(find "$SDK_ROOT/build-tools" -name apksigner -type f | sort | tail -1)"
           [ -n "$APKSIGNER" ] || { echo "::error::apksigner not found under $SDK_ROOT/build-tools"; exit 1; }
 
+          # ---------------------------------------------------------- signature --
           echo "=== signature ==="
-          if ! "$APKSIGNER" verify --print-certs "$APK" > "$RUNNER_TEMP/apksigner.txt" 2>&1; then
+          # --verbose is what makes apksigner print the "Verified using ..." scheme
+          # lines; --print-certs adds the signer certificate.
+          if ! "$APKSIGNER" verify --verbose --print-certs "$APK" > "$RUNNER_TEMP/apksigner.txt" 2>&1; then
             echo "::error::apksigner rejected the release APK - it is not correctly signed."
-            cat "$RUNNER_TEMP/apksigner.txt"
+            annotate_file '^(Verifies|Verified using|Number of signers|DOES NOT VERIFY|ERROR)' "$RUNNER_TEMP/apksigner.txt"
             exit 1
           fi
-          grep -E '^(Verifies|Verified using)' "$RUNNER_TEMP/apksigner.txt"
+          grep -E '^(Verifies|Verified using|Number of signers)' "$RUNNER_TEMP/apksigner.txt"
+          # Signer certificate fingerprint: public information, printed so a release
+          # can be checked against `keytool -list`. The DN is deliberately not logged.
+          grep -E '^Signer #1 certificate SHA-256 digest:' "$RUNNER_TEMP/apksigner.txt" || true
           if ! grep -qE 'Verified using v[23] scheme.*: true' "$RUNNER_TEMP/apksigner.txt"; then
             echo "::error::The APK is not signed with the modern (v2/v3) signature scheme."
+            annotate_file '^(Verifies|Verified using|Number of signers|DOES NOT VERIFY|ERROR)' "$RUNNER_TEMP/apksigner.txt"
             exit 1
           fi
 
+          # ----------------------------------------------------------- identity --
           echo "=== identity ==="
           AAPT2="$(find "$SDK_ROOT/build-tools" -name aapt2 -type f | sort | tail -1)"
           [ -n "$AAPT2" ] || { echo "::error::aapt2 not found under $SDK_ROOT/build-tools"; exit 1; }
-          "$AAPT2" dump badging "$APK" > "$RUNNER_TEMP/badging.txt"
+          "$AAPT2" dump badging "$APK" > "$RUNNER_TEMP/badging.txt" 2>/dev/null || true
           grep -E '^(package|application-label|sdkVersion|targetSdkVersion)' "$RUNNER_TEMP/badging.txt" || true
-          grep -q "package: name='com.lastzone.game'" "$RUNNER_TEMP/badging.txt" \
-            || { echo "::error::Unexpected application ID in the APK (expected com.lastzone.game)."; exit 1; }
-          grep -qi 'LAST ZONE' "$RUNNER_TEMP/badging.txt" \
-            || { echo "::error::Unexpected application label in the APK (expected LAST ZONE)."; exit 1; }
+          if ! grep -q "package: name='com.lastzone.game'" "$RUNNER_TEMP/badging.txt"; then
+            echo "::error::Unexpected application ID in the APK (expected com.lastzone.game)."
+            annotate_file '^(package|application-label|sdkVersion|targetSdkVersion|application:)' "$RUNNER_TEMP/badging.txt"
+            exit 1
+          fi
+          if ! grep -qi 'LAST ZONE' "$RUNNER_TEMP/badging.txt"; then
+            echo "::error::Unexpected application label in the APK (expected LAST ZONE)."
+            annotate_file '^(package|application-label|sdkVersion|targetSdkVersion|application:)' "$RUNNER_TEMP/badging.txt"
+            exit 1
+          fi
 
+          # ----------------------------------------------------- packaged game --
           echo "=== packaged game ==="
           unzip -l "$APK" > "$RUNNER_TEMP/apk-contents.txt"
-          grep -E 'assets/public/(index.html|favicon.svg|assets/)' "$RUNNER_TEMP/apk-contents.txt" \
-            || { echo "::error::The APK does not contain the built LAST ZONE web bundle (assets/public)."; exit 1; }
+          if ! grep -E 'assets/public/(index.html|favicon.svg|assets/)' "$RUNNER_TEMP/apk-contents.txt"; then
+            echo "::error::The APK does not contain the built LAST ZONE web bundle (assets/public)."
+            annotate_file 'assets/' "$RUNNER_TEMP/apk-contents.txt"
+            exit 1
+          fi
 
           ls -lh "$APK"
           echo "sha256: $(sha256sum "$APK" | cut -d' ' -f1)"
