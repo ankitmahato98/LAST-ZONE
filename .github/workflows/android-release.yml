@@ -39,7 +39,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # ---------------------------------------------------------------- guard --
       # Fail immediately, and in plain language, when the signing secrets are
@@ -63,19 +63,19 @@ jobs:
           echo "All four signing secrets are present."
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Ensure Android SDK components
         run: |
@@ -145,33 +145,51 @@ jobs:
           # signing environment exactly as set on this step.
           ./gradlew --no-daemon --stacktrace assembleRelease
 
-      - name: Verify APK is signed and collect details
+      # ---------------------------------------------------------- verification --
+      # Hard gates: the artifact must be a signed APK for com.lastzone.game that
+      # contains the built game. Any of these failing fails the job.
+      - name: Verify APK identity, signature and packaged game
         run: |
           set -euo pipefail
           APK="android/app/build/outputs/apk/release/app-release.apk"
-          if [ ! -f "$APK" ]; then
-            echo "::error::Expected APK not found at $APK"
-            exit 1
-          fi
-          APKSIGNER="$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -name apksigner -type f | sort | tail -1)"
-          if [ -n "$APKSIGNER" ]; then
-            "$APKSIGNER" verify --print-certs "$APK" | grep -E '^(Verifies|Verified using)' || true
-          fi
-          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
-          "$SDK_ROOT/build-tools/35.0.0/aapt2" dump badging "$APK" 2>/dev/null \
-            | grep -E "^(package|application-label|sdkVersion|targetSdkVersion)" || true
+          [ -f "$APK" ] || { echo "::error::Expected signed APK not found at $APK"; exit 1; }
 
-          # The APK must contain the real game, not a placeholder page.
-          echo "--- game assets packaged into the APK ---"
-          unzip -l "$APK" | grep -E "assets/public/(index.html|favicon.svg|assets/)" || {
-            echo "::error::The APK does not contain the built LAST ZONE web bundle (assets/public)."
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          APKSIGNER="$(find "$SDK_ROOT/build-tools" -name apksigner -type f | sort | tail -1)"
+          [ -n "$APKSIGNER" ] || { echo "::error::apksigner not found under $SDK_ROOT/build-tools"; exit 1; }
+
+          echo "=== signature ==="
+          if ! "$APKSIGNER" verify --print-certs "$APK" > "$RUNNER_TEMP/apksigner.txt" 2>&1; then
+            echo "::error::apksigner rejected the release APK - it is not correctly signed."
+            cat "$RUNNER_TEMP/apksigner.txt"
             exit 1
-          }
+          fi
+          grep -E '^(Verifies|Verified using)' "$RUNNER_TEMP/apksigner.txt"
+          if ! grep -qE 'Verified using v[23] scheme.*: true' "$RUNNER_TEMP/apksigner.txt"; then
+            echo "::error::The APK is not signed with the modern (v2/v3) signature scheme."
+            exit 1
+          fi
+
+          echo "=== identity ==="
+          AAPT2="$(find "$SDK_ROOT/build-tools" -name aapt2 -type f | sort | tail -1)"
+          [ -n "$AAPT2" ] || { echo "::error::aapt2 not found under $SDK_ROOT/build-tools"; exit 1; }
+          "$AAPT2" dump badging "$APK" > "$RUNNER_TEMP/badging.txt"
+          grep -E '^(package|application-label|sdkVersion|targetSdkVersion)' "$RUNNER_TEMP/badging.txt" || true
+          grep -q "package: name='com.lastzone.game'" "$RUNNER_TEMP/badging.txt" \
+            || { echo "::error::Unexpected application ID in the APK (expected com.lastzone.game)."; exit 1; }
+          grep -qi 'LAST ZONE' "$RUNNER_TEMP/badging.txt" \
+            || { echo "::error::Unexpected application label in the APK (expected LAST ZONE)."; exit 1; }
+
+          echo "=== packaged game ==="
+          unzip -l "$APK" > "$RUNNER_TEMP/apk-contents.txt"
+          grep -E 'assets/public/(index.html|favicon.svg|assets/)' "$RUNNER_TEMP/apk-contents.txt" \
+            || { echo "::error::The APK does not contain the built LAST ZONE web bundle (assets/public)."; exit 1; }
+
           ls -lh "$APK"
           echo "sha256: $(sha256sum "$APK" | cut -d' ' -f1)"
 
       - name: Upload release APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: last-zone-release-apk
           path: android/app/build/outputs/apk/release/app-release.apk
