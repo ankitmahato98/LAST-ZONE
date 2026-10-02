@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- LAST ZONE palette, mirroring the "lz" custom properties in src/styles/main.css. -->
+    <color name="lastzone_background">#070B0E</color>
+    <color name="lastzone_surface">#0A1218</color>
+    <color name="lastzone_accent">#4EF0C8</color>
+
+    <!-- Theme.AppCompat attributes used by AppTheme. -->
+    <color name="colorPrimary">#0A1218</color>
+    <color name="colorPrimaryDark">#070B0E</color>
+    <color name="colorAccent">#4EF0C8</color>
+
+    <!-- Status/navigation bars blend into the game background. -->
+    <color name="lastzone_system_bar">#00000000</color>
+</resources>

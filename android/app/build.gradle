@@ -1,0 +1,158 @@
+apply plugin: 'com.android.application'
+
+// ---------------------------------------------------------------------------
+// Release signing
+//
+// Credentials are never stored in this file. They are read, in order of
+// preference, from:
+//
+//   1. android/keystore.properties  (git-ignored, for local release builds)
+//        storeFile=/absolute/path/to/release.keystore
+//        storePassword=...
+//        keyAlias=...
+//        keyPassword=...
+//
+//   2. environment variables (what CI uses, so no secrets touch the repo tree)
+//        ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD,
+//        ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+//
+// A release build without signing configuration fails immediately with a clear
+// message instead of silently producing an unsigned APK.
+// ---------------------------------------------------------------------------
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+def hasKeystoreProperties = keystorePropertiesFile.exists()
+if (hasKeystoreProperties) {
+    keystorePropertiesFile.withInputStream { stream -> keystoreProperties.load(stream) }
+}
+
+def signingValue = { String propertyName, String envName ->
+    def fromProperties = hasKeystoreProperties ? keystoreProperties.getProperty(propertyName) : null
+    if (fromProperties != null && !fromProperties.trim().isEmpty()) {
+        return fromProperties.trim()
+    }
+    def fromEnvironment = System.getenv(envName)
+    if (fromEnvironment != null && !fromEnvironment.trim().isEmpty()) {
+        return fromEnvironment.trim()
+    }
+    return null
+}
+
+def releaseStorePath = signingValue('storeFile', 'ANDROID_KEYSTORE_PATH')
+def releaseStorePassword = signingValue('storePassword', 'ANDROID_KEYSTORE_PASSWORD')
+def releaseKeyAlias = signingValue('keyAlias', 'ANDROID_KEY_ALIAS')
+def releaseKeyPassword = signingValue('keyPassword', 'ANDROID_KEY_PASSWORD')
+
+def signingProblems = []
+if (releaseStorePath == null) {
+    signingProblems << "storeFile is missing (android/keystore.properties or ANDROID_KEYSTORE_PATH)"
+} else if (!file(releaseStorePath).exists()) {
+    signingProblems << "the keystore file does not exist at ${releaseStorePath}"
+}
+if (releaseStorePassword == null) {
+    signingProblems << "storePassword is missing (android/keystore.properties or ANDROID_KEYSTORE_PASSWORD)"
+}
+if (releaseKeyAlias == null) {
+    signingProblems << "keyAlias is missing (android/keystore.properties or ANDROID_KEY_ALIAS)"
+}
+if (releaseKeyPassword == null) {
+    signingProblems << "keyPassword is missing (android/keystore.properties or ANDROID_KEY_PASSWORD)"
+}
+
+def hasReleaseSigning = signingProblems.isEmpty()
+
+android {
+    namespace "com.lastzone.game"
+    compileSdk rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.lastzone.game"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        // Keep in step with package.json (0.2.0 = combat prototype).
+        versionCode 2
+        versionName "0.2.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+
+    signingConfigs {
+        release {
+            if (hasReleaseSigning) {
+                storeFile file(releaseStorePath)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+                // v1 + v2 + v3 signatures: installable everywhere, and v2/v3 are
+                // what modern Android verifies first.
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+// Fail loudly and *before* compiling when someone asks for a release build
+// without provisioning the signing credentials.
+gradle.taskGraph.whenReady { taskGraph ->
+    def releaseRequested = taskGraph.allTasks.any { task ->
+        task.name.toLowerCase().contains('release')
+    }
+    if (releaseRequested && !hasReleaseSigning) {
+        throw new GradleException(
+            "Release signing is not configured, refusing to build an unsigned release APK.\n" +
+            "Provide the credentials in one of these ways:\n" +
+            "  1. android/keystore.properties (git-ignored): storeFile, storePassword, keyAlias, keyPassword\n" +
+            "  2. environment variables: ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, " +
+            "ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD\n" +
+            "Problems found:\n" +
+            signingProblems.collect { "  - " + it }.join("\n")
+        )
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    // MainActivity uses WindowCompat / WindowInsetsControllerCompat for immersive
+    // mode, so androidx.core is a direct dependency rather than a transitive one.
+    implementation "androidx.core:core:$androidxCoreVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

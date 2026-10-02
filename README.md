@@ -6,9 +6,10 @@
 
 Current build: renderer, procedural world, third-person controller, a device-agnostic input layer
 and a **third-person combat prototype** (one rifle, hitscan, ammo, reload, health, elimination and
-training dummies).
+training dummies) — playable in the browser **and as a signed Android APK**.
 
 `npm install` → `npm run dev` → open the printed URL → press **Deploy**.
+Android: `npm run android:apk`, or let CI build it (see [Android APK](#android-apk)).
 
 </div>
 
@@ -35,7 +36,8 @@ a rewrite.
 | Targets | Eight training dummies around the arena with health bars, hit flashes, a fall-over death and automatic rebuild |
 | Input | One `intent` object fed by keyboard, mouse (pointer lock *or* drag fallback) and multi-touch controls - gameplay never knows which device is talking |
 | UI | Deploy/pause menu, dynamic reticle that tracks weapon spread, health/ammo/reload readouts, hit markers, damage vignette, elimination banner, adaptive control hints, on-screen touch stick + fire/jump/aim/run/reload/pause buttons, F3 debug overlay |
-| Engineering | Fixed-timestep simulation decoupled from rendering, service registry, event bus, 95 automated tests (world, movement, combat, and end-to-end boot + combat playthroughs under jsdom) |
+| Engineering | Fixed-timestep simulation decoupled from rendering, service registry, event bus, 101 automated tests (world, movement, combat, Android shell integration, and end-to-end boot + combat playthroughs under jsdom) |
+| Android | The same production bundle wrapped with Capacitor: landscape immersive fullscreen, keep-awake, back-button pause, adaptive launcher icon and splash, release signing through CI secrets (see [Android APK](#android-apk)) |
 
 **Not included yet** (by design, so the build stays reviewable):
 further weapons, loot, inventory, the shrinking zone, bots, match flow,
@@ -60,13 +62,138 @@ npm run dev
 Other scripts:
 
 ```bash
-npm test          # 34 unit + integration tests (Node's built-in test runner)
-npm run build     # production bundle into dist/
-npm run preview   # serve the built bundle on http://localhost:4173
+npm test             # 101 unit + integration tests (Node's built-in test runner)
+npm run build        # production bundle into dist/
+npm run preview      # serve the built bundle on http://localhost:4173
+
+npm run android:sync     # build the game, then copy dist/ into the Android project
+npm run android:assemble # debug APK (no signing secrets needed)
+npm run android:apk      # signed release APK (needs signing credentials, see below)
+npm run android:open     # open the project in Android Studio
 ```
 
 No build step is required for development, no external services or API keys are
 used, and the game runs entirely offline.
+
+---
+
+## Android APK
+
+The APK is **the same game**, not a port: Vite builds `dist/`, Capacitor copies that
+exact bundle into `android/app/src/main/assets/public/`, and the WebView runs it.
+No gameplay code is forked, simplified or replaced for Android.
+
+### What the Android build adds
+
+| Concern | How it is handled |
+| --- | --- |
+| App identity | Label **LAST ZONE**, application ID / namespace `com.lastzone.game`, `versionName` 0.2.0 (`versionCode` 2) |
+| Screen | `sensorLandscape`, immersive fullscreen (system bars hidden, swipe to reveal transiently), `resizeableActivity="false"`, cutout/edge-to-edge insets respected |
+| Power | `FLAG_KEEP_SCREEN_ON` while the game is in the foreground |
+| Back gesture | Pauses the match through the existing menu; a second Back from the pause menu exits |
+| Touch | The existing multi-touch controls (stick, look area, fire/aim/jump/run/reload), now with `viewport-fit=cover`, `dvh` sizing and no long-press selection on the canvas |
+| Hardware | OpenGL ES 2.0+ required (WebGL2 in practice), large heap, hardware acceleration |
+| Branding | Adaptive launcher icon (anydpi-v26 vector + raster fallbacks) and splash screens for every density, drawn from the in-game zone-ring mark - regenerate with `tools/generate-android-icons.sh` |
+| Offline | Everything is bundled locally; `androidScheme: https`, no network permission use beyond the manifest declaration |
+
+### Toolchain
+
+| Component | Version |
+| --- | --- |
+| Capacitor | 7 (`@capacitor/core`, `@capacitor/cli`, `@capacitor/android`, `@capacitor/app`) |
+| Gradle / Android Gradle Plugin | 8.11.1 / 8.7.2 (wrapper is committed) |
+| JDK | 21 (Capacitor 7 compiles with `sourceCompatibility 21`) |
+| Android SDK | compileSdk 35, targetSdk 35, minSdk 23 (Android 6+) |
+
+### Building locally
+
+```bash
+npm install
+npm run android:sync        # npm run build + cap sync android
+npm run android:open        # ... or open Android Studio and press Run
+npm run android:assemble    # debug APK: android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+Install on a device/emulator with `adb install -r <apk>`, or sideload it.
+
+A **release** build must be signed. Gradle reads the credentials from
+`android/keystore.properties` (git-ignored) or from the environment, and refuses to
+produce an unsigned release APK:
+
+```bash
+# 1. one-time: create a keystore (keep it out of the repo!)
+keytool -genkeypair -v -keystore release.keystore -alias lastzone \
+  -keyalg RSA -keysize 2048 -validity 10000 \
+  -storetype PKCS12
+
+# 2. local release builds - android/keystore.properties
+cat > android/keystore.properties <<'EOF'
+storeFile=/absolute/path/to/release.keystore
+storePassword=********
+keyAlias=lastzone
+keyPassword=********
+EOF
+
+# 3. build
+npm run android:apk        # android/app/build/outputs/apk/release/app-release.apk
+```
+
+`android/keystore.properties` may point at a keystore anywhere on disk; the
+environment variables `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` work too (and take a back seat to
+the properties file when both exist).
+
+### Signing in CI
+
+`.github/workflows/android-release.yml` builds the signed release APK on every push
+to `main` (and on demand via *Run workflow*). Add these four repository secrets under
+**Settings → Secrets and variables → Actions**:
+
+| Secret | Value |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | `base64 -w 0 release.keystore` (macOS: `base64 -i release.keystore`) - a single line |
+| `ANDROID_KEYSTORE_PASSWORD` | keystore password |
+| `ANDROID_KEY_ALIAS` | key alias (`lastzone` above) |
+| `ANDROID_KEY_PASSWORD` | key password |
+
+The workflow runs the test suite, builds the production game, syncs it into the
+Android project, decodes the keystore into `$RUNNER_TEMP`, verifies that it opens and
+contains the requested alias, runs `./gradlew assembleRelease`, checks that the APK is
+signed **and** that `assets/public/` really contains the built game, then uploads:
+
+```
+artifact:  last-zone-release-apk
+path:      android/app/build/outputs/apk/release/app-release.apk
+```
+
+If any of the four secrets is missing the workflow fails immediately with a message
+naming the missing secret(s) - it never falls back to an unsigned or debug build.
+
+### Credential rules (enforced, not just documented)
+
+* The keystore, `keystore.properties` and every `*.jks` / `*.keystore` / `*.p12` file
+  are in `.gitignore` (root and Android). Nothing signing-related is ever committed.
+* No password, alias or path is hardcoded in `build.gradle`, the workflow or the
+  game source. Passwords reach Gradle through the environment, never through
+  command-line arguments.
+* CI decodes the keystore only for the duration of the build, into `$RUNNER_TEMP`
+  (outside the checkout, never uploaded); `keytool` is invoked with
+  `-storepass:env` so the password never appears in a process listing, and its
+  output is discarded so nothing sensitive reaches the logs.
+* Losing the keystore means losing the ability to update an installed APK - back it
+  up somewhere safe and private.
+
+### Android notes
+
+* First launch shows the splash art while the WebGL context and shaders warm up, then
+  hands over to the deploy menu.
+* The deploy/pause menu is reachable at any time with the ⏸ button or the Back
+  gesture; the match resumes where it left off.
+* Debugging: `chrome://inspect` over `adb` sees the WebView once
+  `webContentsDebuggingEnabled` is turned on in `capacitor.config.json` (it is off by
+  default so release builds stay quiet).
+* To change the application ID, edit it in `capacitor.config.json` *and*
+  `android/app/build.gradle`, then re-run `npm run android:sync`.
 
 ---
 
@@ -121,7 +248,11 @@ you touch the screen. Force it with `?touch=1`, hide it with `?touch=0`.
 LAST-ZONE/
 ├── index.html                 # single canvas + UI mount point
 ├── vite.config.js             # dev/build config (host 0.0.0.0, relative base)
+├── capacitor.config.json      # Android shell config (appId, webDir, splash, scheme)
 ├── public/favicon.svg
+├── android/                   # Capacitor Android project (Gradle, manifest, icons)
+├── tools/
+│   └── generate-android-icons.sh  # regenerates launcher icons + splash screens
 ├── src/
 │   ├── main.js                # entry point: createGame -> warm up -> start
 │   ├── config/settings.js     # ALL tuning values (speeds, camera, quality, bindings)
@@ -171,6 +302,8 @@ LAST-ZONE/
 │   │   ├── HudSystem.js       # brand mark + adaptive control hints
 │   │   ├── CombatHud.js       # reticle, health, ammo, hit markers, banner
 │   │   └── DebugOverlay.js    # F3 readout (movement + combat telemetry)
+│   ├── platform/
+│   │   └── nativeApp.js       # Capacitor shell glue (Android back button); inert on the web
 │   ├── utils/                 # math, seeded RNG, value noise, DOM helpers
 │   └── styles/main.css        # UI design system
 └── tests/                     # node:test suites + jsdom/headless helpers
@@ -346,6 +479,9 @@ npm test
   pointer events (menu, WASD, sprint, jump, camera drag/zoom, virtual stick,
   touch look, pause, respawn, debug overlay) and asserts the player never ends up
   inside geometry.
+* `tests/native-app.test.js` - the Android shell integration: the platform check,
+  and the back-button policy (pause a live match, exit only from the pause menu)
+  exercised through an injected Capacitor `App` plugin, no device required.
 * `tests/combat-e2e.test.js` - combat through the *real* game, using only player
   entry points: pointer-lock mouse fire, `F` key fire, aiming, recoil, reload
   (key + button), auto-reload on empty, fire-rate measurement, headshots,
@@ -387,6 +523,9 @@ point, not a stub:
 | Movement feels too fast/slow | Tune `PLAYER.walkSpeed`, `sprintSpeed`, `groundAcceleration` in `src/config/settings.js`. |
 | Low FPS on a phone | Add `?quality=mobile` (or set `QUALITY.mobile`); reduce `shadowMapSize` / `terrainSegments` further. |
 | Dev server not reachable from another device | It already binds `0.0.0.0`; open `http://<your-lan-ip>:5173`. |
+| Android build: "Release signing is not configured" | Provide `android/keystore.properties` or the four `ANDROID_*` environment variables; debug builds (`npm run android:assemble`) need nothing. |
+| Android build: "Alias ... was not found in the keystore" | The `ANDROID_KEY_ALIAS` secret does not match the alias inside the uploaded keystore. |
+| Android build: "Missing signing secret(s)" | Add the four secrets listed in [Signing in CI](#signing-in-ci), then re-run the workflow. |
 
 Tested in current Chrome, Edge, Firefox and Safari (desktop and mobile) — the
 only requirement is a WebGL2-capable browser, no accounts, no backend, no
@@ -397,6 +536,7 @@ external APIs.
 ## Roadmap
 
 1. ~~**Combat**: a weapon, hitscan hit detection, ammo, reload, health, elimination.~~ ✅ *(this build)*
+1b. ~~**Android packaging**: signed release APK via Capacitor + GitHub Actions.~~ ✅ *(this build)*
 2. **Weapon variety**: a second and third weapon (projectiles, shotgun pellets), weapon switching, pickups.
 3. **Loot & inventory**: world spawns, pickups, hotbar, healing items.
 4. **The zone**: shrinking play area with escalating damage and a minimap.

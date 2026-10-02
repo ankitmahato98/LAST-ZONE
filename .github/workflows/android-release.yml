@@ -1,0 +1,179 @@
+name: Android release APK
+
+# Builds the real LAST ZONE game (the same Vite production bundle the web build
+# ships), syncs it into the Capacitor Android project and produces a *signed*
+# release APK as a build artifact.
+#
+# Required repository secrets (Settings -> Secrets and variables -> Actions):
+#   ANDROID_KEYSTORE_BASE64    base64 of the release keystore (.jks/.keystore)
+#   ANDROID_KEYSTORE_PASSWORD  keystore password
+#   ANDROID_KEY_ALIAS          key alias inside the keystore
+#   ANDROID_KEY_PASSWORD       password for that key
+#
+# Create the base64 blob on your machine with:
+#   base64 -w 0 release.keystore   (macOS: base64 -i release.keystore)
+#
+# The keystore is decoded into $RUNNER_TEMP for the build only and is never
+# written into the repository, never uploaded and never printed. Passwords are
+# passed to Gradle through the environment (never as command line arguments) and
+# appear nowhere in the logs.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  release-apk:
+    name: Signed release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------- guard --
+      # Fail immediately, and in plain language, when the signing secrets are
+      # missing. Values are only ever tested for emptiness - never echoed.
+      - name: Verify signing secrets are present
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=""
+          [ -n "$ANDROID_KEYSTORE_BASE64" ]   || missing="$missing ANDROID_KEYSTORE_BASE64"
+          [ -n "$ANDROID_KEYSTORE_PASSWORD" ] || missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          [ -n "$ANDROID_KEY_ALIAS" ]         || missing="$missing ANDROID_KEY_ALIAS"
+          [ -n "$ANDROID_KEY_PASSWORD" ]      || missing="$missing ANDROID_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing signing secret(s):$missing. Add them under Settings -> Secrets and variables -> Actions -> New repository secret, then re-run this workflow."
+            exit 1
+          fi
+          echo "All four signing secrets are present."
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Ensure Android SDK components
+        run: |
+          SDKMANAGER="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            echo "::warning::sdkmanager not found; using the SDK preinstalled on the runner."
+            exit 0
+          fi
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" > /dev/null
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run test suite
+        run: npm test
+
+      - name: Build production game
+        run: npm run build
+
+      - name: Sync web build into the Android project
+        run: npx cap sync android
+
+      # -------------------------------------------------------------- signing --
+      - name: Restore signing keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          KEYSTORE_PATH="$RUNNER_TEMP/release.keystore"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          if [ ! -s "$KEYSTORE_PATH" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 did not decode to a file. Re-export it with 'base64 -w 0 <file>' (single line, no wrapping)."
+            exit 1
+          fi
+          # Prove the keystore opens and contains the requested alias before
+          # Gradle runs. -storepass:env keeps the password off the command line
+          # and all keytool output is discarded, so nothing sensitive is logged.
+          if ! keytool -list -keystore "$KEYSTORE_PATH" -storepass:env ANDROID_KEYSTORE_PASSWORD > /dev/null 2>&1; then
+            echo "::error::The decoded keystore could not be opened - check ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD."
+            exit 1
+          fi
+          if ! keytool -list -keystore "$KEYSTORE_PATH" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" > /dev/null 2>&1; then
+            echo "::error::Alias '$ANDROID_KEY_ALIAS' was not found in the keystore - check ANDROID_KEY_ALIAS."
+            exit 1
+          fi
+          # Hand the *path* to the next steps without exposing any secret value.
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+          echo "Signing keystore decoded and verified (path kept in \$RUNNER_TEMP)."
+
+      - name: Build signed release APK
+        # ANDROID_KEYSTORE_PATH arrives through $GITHUB_ENV from the step above;
+        # the passwords are injected here for the build only. Gradle reads them
+        # from the environment (see android/app/build.gradle) - no credentials
+        # are ever written into the checkout.
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          chmod +x android/gradlew
+          cd android
+          # --no-daemon: CI runs a single build and the daemon must inherit the
+          # signing environment exactly as set on this step.
+          ./gradlew --no-daemon --stacktrace assembleRelease
+
+      - name: Verify APK is signed and collect details
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "$APK" ]; then
+            echo "::error::Expected APK not found at $APK"
+            exit 1
+          fi
+          APKSIGNER="$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -name apksigner -type f | sort | tail -1)"
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --print-certs "$APK" | grep -E '^(Verifies|Verified using)' || true
+          fi
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          "$SDK_ROOT/build-tools/35.0.0/aapt2" dump badging "$APK" 2>/dev/null \
+            | grep -E "^(package|application-label|sdkVersion|targetSdkVersion)" || true
+
+          # The APK must contain the real game, not a placeholder page.
+          echo "--- game assets packaged into the APK ---"
+          unzip -l "$APK" | grep -E "assets/public/(index.html|favicon.svg|assets/)" || {
+            echo "::error::The APK does not contain the built LAST ZONE web bundle (assets/public)."
+            exit 1
+          }
+          ls -lh "$APK"
+          echo "sha256: $(sha256sum "$APK" | cut -d' ' -f1)"
+
+      - name: Upload release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: last-zone-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
