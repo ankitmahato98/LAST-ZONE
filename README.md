@@ -151,7 +151,7 @@ to `main` (and on demand via *Run workflow*). Add these four repository secrets 
 
 | Secret | Value |
 | --- | --- |
-| `ANDROID_KEYSTORE_BASE64` | `base64 -w 0 release.keystore` (macOS: `base64 -i release.keystore`) - a single line |
+| `ANDROID_KEYSTORE_BASE64` | `base64 -w 0 release.keystore` (macOS: `base64 -b 0 -i release.keystore`) - the whole keystore as one base64 blob |
 | `ANDROID_KEYSTORE_PASSWORD` | keystore password |
 | `ANDROID_KEY_ALIAS` | key alias (`lastzone` above) |
 | `ANDROID_KEY_PASSWORD` | key password |
