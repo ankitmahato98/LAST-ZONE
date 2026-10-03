@@ -35,8 +35,15 @@ export function listWeaponIds() {
 /**
  * @param {string} id
  * @param {object} [overrides] per-instance ballistics (attachments, variants)
+ * @param {{magazine?:number|null, reserve?:number|null}} [state] carried-over
+ *        magazine/reserve - used when a weapon is looted or re-picked up after
+ *        being dropped.
  */
-export function createWeapon(id, overrides = {}) {
+export function createWeapon(id, overrides = {}, state = {}) {
   const type = { ...getWeaponType(id), ...overrides };
-  return new Weapon({ type });
+  return new Weapon({
+    type,
+    magazine: state.magazine ?? null,
+    reserve: state.reserve ?? null,
+  });
 }

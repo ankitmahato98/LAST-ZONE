@@ -22,8 +22,12 @@ import { CombatSystem } from '../combat/CombatSystem.js';
 import { CombatEffects } from '../combat/CombatEffects.js';
 import { TargetSystem } from '../combat/Target.js';
 
+import { LootSystem } from '../loot/LootSystem.js';
+import { InventorySystem } from '../inventory/InventorySystem.js';
+
 import { HudSystem } from '../ui/HudSystem.js';
 import { CombatHud } from '../ui/CombatHud.js';
+import { InventoryHud } from '../ui/InventoryHud.js';
 import { LoadingScreen } from '../ui/LoadingScreen.js';
 import { MenuSystem } from '../ui/MenuSystem.js';
 import { DebugOverlay } from '../ui/DebugOverlay.js';
@@ -34,12 +38,13 @@ import { DebugOverlay } from '../ui/DebugOverlay.js';
  * The wiring is spelled out in one place so it stays obvious which system owns
  * what, and where new systems plug in later:
  *
- *   weapons   -> add an entry to WEAPONS in config + a model builder, then
- *                `combat.equipWeapon(id)` (or a future WeaponSystem that owns a
- *                loadout and calls it)
- *   loot      -> world system spawns LootContainers from world/Loot.js and calls
- *                `combat.equipWeapon()` / `weapon.addReserve()` on pickup
- *   inventory -> service registry entry, UI panel subscribes to its events
+ *   weapons   -> add an entry to WEAPONS in config + a model builder; the loot
+ *                tables pick it up automatically (weapon ids are loot ids)
+ *   loot      -> LootSystem rolls `world.lootAnchors` from the data loot tables
+ *                and owns the world entities; nothing spawns by hand
+ *   inventory -> InventorySystem routes pickups/drops into the Inventory and
+ *                consumables into Vitals; the HUD only listens
+ *   items     -> add an entry to loot/items/ItemData.js (+ a loot table weight)
  *   zone      -> game.addSystem(new ZoneSystem()) after the world; it can damage
  *                the player through `combat.damagePlayer()` like fall damage does
  *   lobby     -> replace MenuSystem's Play action with a lobby handshake
@@ -141,10 +146,23 @@ export async function createGame({
   const combat = game.addSystem(new CombatSystem({ seed: WORLD.seed }));
   game.services.register('combat', combat);
 
+  // --- Loot + inventory -------------------------------------------------
+  // Loot owns the physical pickups, inventory owns the loadout. Both resolve
+  // the services they need lazily, so the registration order here is only about
+  // update order: loot announces `loot:nearby` before the inventory reacts to
+  // the interact action in the same fixed step.
+  const loot = game.addSystem(new LootSystem({ seed: WORLD.seed }));
+  game.services.register('loot', loot);
+
+  const inventory = game.addSystem(new InventorySystem({ seed: WORLD.seed }));
+  game.services.register('inventory', inventory);
+
   // --- UI ---------------------------------------------------------------
   const hud = game.addSystem(new HudSystem({ uiRoot }));
   const combatHud = game.addSystem(new CombatHud({ uiRoot }));
   game.services.register('combatHud', combatHud);
+  const inventoryHud = game.addSystem(new InventoryHud({ uiRoot }));
+  game.services.register('inventoryHud', inventoryHud);
   const debug = game.addSystem(new DebugOverlay({ uiRoot, game }));
   const menu = game.addSystem(new MenuSystem({ uiRoot, pointerLook, touch, input }));
   game.services.register('hud', hud);

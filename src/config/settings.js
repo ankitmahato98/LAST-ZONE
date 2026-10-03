@@ -137,12 +137,71 @@ export const CAMERA = {
 };
 
 export const HEALTH = {
-  playerMax: 100,
+  /** LOCKED (Phase B): the player has 200 HP. */
+  playerMax: 200,
   /** Landing faster than this hurts; damage scales with the excess. */
   fallDamageSpeed: 17,
   fallDamagePerSpeed: 4.2,
   /** Brief entry protection on the one initial placement; never reapplied. */
   spawnProtection: 1.2,
+};
+
+/**
+ * EP ("energy") - the second resource bar. LOCKED (Phase B):
+ *
+ *   max EP            300
+ *   1 EP              1 HP
+ *   conversion rate   1 EP per second, so 1 HP per second
+ *   conversion stops  at 200 HP (or when EP runs out)
+ *
+ * EP never regenerates passively: it only comes from consumables, and it is
+ * spent through an explicit conversion into HP - which is why EP can never act
+ * as permanent extra maximum HP.
+ */
+export const EP = {
+  max: 300,
+  /** HP restored per EP spent. */
+  hpPerEnergy: 1,
+  /** EP spent per second while converting. */
+  conversionRate: 1,
+  /** Conversion is player-triggered (action `convert`), never automatic. */
+  autoConvert: false,
+};
+
+/** Inventory layout: kept small and mobile friendly. */
+export const INVENTORY = {
+  /** Weapon slots (slot 0 is the primary). */
+  weaponSlots: 2,
+  /** Distinct consumable stacks the backpack holds. */
+  consumableSlots: 4,
+  /** Future containers - already wired so Phase C items need no rewrite. */
+  armorSlots: 2,
+  attachmentSlots: 4,
+  cosmeticSlots: 2,
+  /** Seconds a rejected action stays surfaced on the HUD. */
+  refusalTime: 1.6,
+};
+
+/** World loot. */
+export const LOOT = {
+  /** How close the player must be for the interact action to work. */
+  interactionRadius: 2.75,
+  /** Distance a dropped item lands in front of the player. */
+  dropDistance: 1.5,
+  /** Extra instance slots per visual so drops never have to grow the scene. */
+  dropHeadroom: 14,
+  /** Hard cap on the pickups generated from map anchors. */
+  maxPickups: 480,
+  /** Spatial hash cell size (metres) for the nearest-pickup query. */
+  cellSize: 24,
+  /** Only pickups this close animate (saves instance writes on mobile). */
+  animationRadius: 70,
+  /** Seconds between idle bob updates. */
+  animationInterval: 1 / 12,
+  /** Radius of the guaranteed arrival-plaza starting kit. */
+  stashRadius: 9.5,
+  /** Drop the starting kit near the plaza center rather than in the ring. */
+  spawnWeaponId: 'rifle',
 };
 
 export const COMBAT = {
@@ -189,6 +248,8 @@ export const WEAPONS = {
     name: 'AR-4 Ranger',
     /** 'hitscan' today; 'projectile' is a future `kind` with the same interface. */
     kind: 'hitscan',
+    /** Ammo family: reloads draw from the matching inventory pool. */
+    ammoType: '556',
     automatic: true,
     damage: 24,
     /** Damage multiplier for hits above `Damageable.headHeightFraction`. */
@@ -241,6 +302,19 @@ export const BINDINGS = {
   primary: ['KeyF'],
   aim: ['KeyQ'],
   reload: ['KeyR'],
+  /** Pick up / swap the loot under the prompt. */
+  interact: ['KeyE'],
+  /** Switch between the two weapon slots. */
+  swapWeapon: ['KeyX'],
+  /** Drop the equipped weapon into the world. */
+  dropWeapon: ['KeyG'],
+  /** Start/stop the EP -> HP conversion. */
+  convert: ['KeyC'],
+  /** Quick-use consumable stacks, in pickup order. */
+  useItem1: ['Digit1'],
+  useItem2: ['Digit2'],
+  useItem3: ['Digit3'],
+  useItem4: ['Digit4'],
   hurtMe: ['KeyH'],
   lookUp: ['KeyI'],
   lookDown: ['KeyK'],

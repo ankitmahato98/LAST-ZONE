@@ -15,14 +15,16 @@ import { COMBAT } from '../../config/settings.js';
  * `reload:end`, `reload:cancelled`.
  */
 export class Weapon extends Emitter {
-  constructor({ type, magazine = null, reserve = null } = {}) {
+  constructor({ type, magazine = null, reserve = null, state = null } = {}) {
     super();
     if (!type) throw new Error('Weapon requires a type definition');
 
     this.type = type;
     this.magazineSize = type.magazineSize;
-    this.magazine = magazine ?? type.magazineSize;
-    this.reserve = reserve ?? type.reserveAmmo ?? 0;
+    // A looted weapon carries its own magazine state; reserve ammo always comes
+    // from the inventory pool, so a fresh pickup starts with an empty reserve.
+    this.magazine = magazine ?? state?.magazine ?? type.magazineSize;
+    this.reserve = reserve ?? state?.reserve ?? type.reserveAmmo ?? 0;
     this.falloff = type.falloff ?? {
       start: COMBAT.falloffStart,
       end: COMBAT.falloffEnd,
@@ -46,6 +48,11 @@ export class Weapon extends Emitter {
 
   get name() {
     return this.type.name ?? this.type.id;
+  }
+
+  /** Ammo family - the inventory's ammo pool is keyed by this. */
+  get ammoType() {
+    return this.type.ammoType ?? '556';
   }
 
   get isReloading() {

@@ -15,6 +15,9 @@ import { clamp } from '../utils/math.js';
  *   intent.jumpHeld / intent.sprintHeld / intent.aimHeld   (held buttons)
  *   intent.jumpQueued / intent.primaryPressed / intent.reloadPressed (edges)
  *   intent.primaryHeld   (held: automatic fire, mobile fire button)
+ *   intent.interactPressed / intent.swapPressed / intent.dropPressed (edges)
+ *   intent.convertPressed  (edge: toggle EP -> HP conversion)
+ *   intent.useItemPressed  fixed array, one edge flag per consumable quick slot
  *   intent.active  'keyboard' | 'touch'   (last device that produced input)
  *
  * That indirection is what makes the player controller reusable for a network
@@ -34,12 +37,32 @@ export const InputActions = Object.freeze({
   AIM: 'aim',
   /** Manual reload. Edge triggered. */
   RELOAD: 'reload',
+  /** Pick up / swap the loot under the prompt. Edge triggered. */
   INTERACT: 'interact',
+  /** Switch between weapon slots. Edge triggered. */
+  SWAP_WEAPON: 'swapWeapon',
+  /** Drop the equipped weapon into the world. Edge triggered. */
+  DROP_WEAPON: 'dropWeapon',
+  /** Start/stop converting EP into HP. Edge triggered. */
+  CONVERT: 'convert',
+  /** Quick-use consumable stacks, in inventory order. Edge triggered. */
+  USE_ITEM_1: 'useItem1',
+  USE_ITEM_2: 'useItem2',
+  USE_ITEM_3: 'useItem3',
+  USE_ITEM_4: 'useItem4',
   /** Debug-only: hurt me so the damage feedback can be tested in game. */
   HURT_ME: 'hurtMe',
   TOGGLE_DEBUG: 'toggleDebug',
   TOGGLE_TOUCH: 'toggleTouch',
 });
+
+/** Quick-use actions, in slot order - index === inventory consumable index. */
+export const USE_ITEM_ACTIONS = Object.freeze([
+  InputActions.USE_ITEM_1,
+  InputActions.USE_ITEM_2,
+  InputActions.USE_ITEM_3,
+  InputActions.USE_ITEM_4,
+]);
 
 /** Movement actions that contribute to the movement axis. */
 const MOVEMENT_ACTIONS = {
@@ -85,6 +108,12 @@ export class InputSystem {
       primaryPressed: false,
       aimHeld: false,
       reloadPressed: false,
+      interactPressed: false,
+      swapPressed: false,
+      dropPressed: false,
+      convertPressed: false,
+      /** One flag per consumable quick slot; mutated in place (no alloc). */
+      useItemPressed: [false, false, false, false],
       active: 'keyboard',
     };
 
@@ -223,6 +252,11 @@ export class InputSystem {
       intent.primaryPressed = false;
       intent.aimHeld = false;
       intent.reloadPressed = false;
+      intent.interactPressed = false;
+      intent.swapPressed = false;
+      intent.dropPressed = false;
+      intent.convertPressed = false;
+      intent.useItemPressed.fill(false);
       this._held.clear();
       this._pressedQueue.clear();
       this._releasedQueue.clear();
@@ -281,6 +315,13 @@ export class InputSystem {
     intent.jumpQueued = this._pressedQueue.has(InputActions.JUMP);
     intent.primaryPressed = this._pressedQueue.has(InputActions.PRIMARY);
     intent.reloadPressed = this._pressedQueue.has(InputActions.RELOAD);
+    intent.interactPressed = this._pressedQueue.has(InputActions.INTERACT);
+    intent.swapPressed = this._pressedQueue.has(InputActions.SWAP_WEAPON);
+    intent.dropPressed = this._pressedQueue.has(InputActions.DROP_WEAPON);
+    intent.convertPressed = this._pressedQueue.has(InputActions.CONVERT);
+    for (let i = 0; i < USE_ITEM_ACTIONS.length; i += 1) {
+      intent.useItemPressed[i] = this._pressedQueue.has(USE_ITEM_ACTIONS[i]);
+    }
     intent.active = this.controlMode;
 
     this._pressedQueue.clear();

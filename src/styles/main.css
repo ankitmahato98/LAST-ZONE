@@ -887,3 +887,270 @@ body[data-touch='true'] .hud__brand {
     bottom: calc(12px + var(--lz-safe-bottom));
   }
 }
+
+/* ==========================================================================
+   Inventory HUD (Phase B): HP/EP, loadout, loot prompt, use channel
+   ========================================================================== */
+
+.inventory-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Overrides the removed Phase A single-bar block: two stacked bars now. */
+.vitals__row--ep {
+  margin-top: 8px;
+}
+
+.vitals__value--ep {
+  font-size: 0.95rem;
+  color: #cfe9ff;
+}
+
+.vitals__fill--ep {
+  background: linear-gradient(90deg, #4aa8ff, #8fd4ff);
+}
+
+.vitals__conversion {
+  margin-top: 8px;
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--lz-text-dim);
+}
+
+.vitals--converting .vitals__conversion {
+  color: #7ff5d8;
+}
+
+.inventory-hud--dead .vitals,
+.inventory-hud--dead .loadout,
+.inventory-hud--dead .prompt {
+  opacity: 0.35;
+  filter: grayscale(0.6);
+}
+
+/* ------------------------------------------------------------- loadout --- */
+
+.loadout {
+  position: absolute;
+  right: calc(18px + var(--lz-safe-right));
+  bottom: calc(150px + var(--lz-safe-bottom));
+  width: min(214px, 34vw);
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--lz-panel);
+  border: 1px solid var(--lz-border);
+  backdrop-filter: blur(6px);
+  font-family: var(--lz-mono);
+  font-size: 0.68rem;
+  color: var(--lz-text);
+}
+
+.loadout__title {
+  font-family: inherit;
+  font-size: 0.58rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--lz-text-dim);
+  margin-bottom: 6px;
+}
+
+.loadout__slot,
+.loadout__item {
+  padding: 3px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.loadout__slot--active {
+  color: var(--lz-accent);
+}
+
+.loadout__slot--empty,
+.loadout__item--empty {
+  color: rgba(190, 214, 226, 0.4);
+}
+
+.loadout__divider {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--lz-border);
+}
+
+/* -------------------------------------------------------------- prompt --- */
+
+.prompt {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 10px;
+  text-align: center;
+  background: rgba(10, 20, 26, 0.62);
+  border: 1px solid var(--lz-border);
+  backdrop-filter: blur(4px);
+  transition: opacity 120ms ease;
+}
+
+.prompt--hidden {
+  display: none;
+}
+
+.prompt--swap {
+  border-color: rgba(255, 209, 102, 0.55);
+}
+
+.prompt--full {
+  border-color: rgba(255, 143, 143, 0.5);
+}
+
+.prompt__row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--lz-text-dim);
+}
+
+.prompt__key {
+  font-family: var(--lz-mono);
+  font-size: 0.7rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--lz-border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--lz-text);
+}
+
+.prompt__action {
+  color: var(--lz-accent);
+  font-weight: 700;
+}
+
+.prompt--swap .prompt__action {
+  color: #ffd166;
+}
+
+.prompt__name {
+  margin-top: 2px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--lz-text);
+}
+
+.prompt__detail {
+  font-size: 0.66rem;
+  color: var(--lz-text-dim);
+}
+
+/* ---------------------------------------------------- use / conversion --- */
+
+.channel {
+  position: absolute;
+  left: 50%;
+  top: 68%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.channel--hidden {
+  display: none;
+}
+
+.channel__label {
+  font-size: 0.62rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #7ff5d8;
+}
+
+.channel__track {
+  width: 168px;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.channel__fill {
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, #4ef0c8, #8fd4ff);
+}
+
+.refusal {
+  position: absolute;
+  left: 50%;
+  top: 74%;
+  transform: translateX(-50%);
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #ffd166;
+  background: rgba(10, 20, 26, 0.6);
+  border: 1px solid rgba(255, 209, 102, 0.35);
+}
+
+.refusal--hidden {
+  display: none;
+}
+
+/* -------------------------------------------------- touch loot buttons --- */
+
+.touch__button--context {
+  width: 92px;
+  height: 92px;
+  background: rgba(78, 240, 200, 0.24);
+  border-color: rgba(78, 240, 200, 0.55);
+}
+
+.touch__button--item {
+  width: 74px;
+  height: 46px;
+  border-radius: 12px;
+  font-size: 0.54rem;
+  line-height: 1.15;
+  padding: 2px 6px;
+}
+
+.touch__button--convert {
+  width: 62px;
+  height: 46px;
+  border-radius: 12px;
+  border-color: rgba(74, 168, 255, 0.6);
+  background: rgba(74, 168, 255, 0.22);
+  font-size: 0.54rem;
+}
+
+@media (max-width: 520px) {
+  .loadout {
+    display: none;
+  }
+
+  .prompt {
+    top: 46%;
+  }
+
+  .channel {
+    top: 60%;
+  }
+
+  .refusal {
+    top: 66%;
+  }
+}

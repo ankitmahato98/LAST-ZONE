@@ -81,6 +81,13 @@ export class MenuSystem {
         ['R', 'reload'],
         ['H', 'test: take 25 damage'],
       ]),
+      group('Loot', [
+        ['E', 'pick up / swap'],
+        ['X', 'swap weapon slot'],
+        ['G', 'drop weapon'],
+        ['1 2 3 4', 'use consumable'],
+        ['C', 'convert EP into HP'],
+      ]),
       group('Camera', [
         ['Mouse', 'look'],
         ['Wheel', 'zoom'],
@@ -92,6 +99,9 @@ export class MenuSystem {
         ['Fire', 'hold to shoot'],
         ['Aim / Run', 'toggle'],
         ['Reload / Jump', 'tap'],
+        ['Pick up', 'appears near loot'],
+        ['Swap / Drop', 'weapon'],
+        ['Items', 'one button per consumable'],
       ]),
       group('System', [
         ['F3', 'debug overlay'],
@@ -103,7 +113,8 @@ export class MenuSystem {
     const note = createElement('p', {
       className: 'panel__note',
       text:
-        'Single-player island foundation: one rifle, hitscan combat and training targets. ' +
+        'Single-player battle royale: loot the island for weapons, ammo and consumables. ' +
+        '200 HP / 300 EP, 1 EP converts into 1 HP per second. ' +
         'Elimination is final for this run; there is no player respawn.',
     });
 
