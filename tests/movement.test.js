@@ -15,7 +15,7 @@ function createController({ boxes = [], cylinders = [], spawn = { x: 0, y: 0, z:
   const world = { collider, heightAt: (x, z) => heightSampler.heightAt(x, z) };
   const config = new CharacterConfig({ spawn });
   const controller = new PlayerController({ world, config });
-  controller.respawn({ x: spawn.x, y: spawn.y, z: spawn.z }, 0);
+  controller.placeAt({ x: spawn.x, y: spawn.y, z: spawn.z }, 0);
   return { controller, collider, config };
 }
 
@@ -230,7 +230,7 @@ test('steep terrain blocks the movement (no wall climbing)', () => {
   const collider = new Collider({ heightSampler });
   const world = { collider, heightAt: heightSampler.heightAt };
   const controller = new PlayerController({ world, config: new CharacterConfig() });
-  controller.respawn({ x: 0, y: 0, z: 0 }, 0);
+  controller.placeAt({ x: 0, y: 0, z: 0 }, 0);
 
   simulate(controller, 3, () => intent({ forward: 1 }));
 

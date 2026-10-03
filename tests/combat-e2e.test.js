@@ -41,7 +41,7 @@ function aimAt(point) {
 /** Place the player `distance` metres in front of a dummy and aim at its chest. */
 function standOffFrom(dummy, distance = 12) {
   const { x, z } = dummy.position;
-  const angle = Math.atan2(x, z); // outward from the arena centre
+  const angle = Math.atan2(x, z); // outward from the Central City range center
   const px = x - Math.sin(angle) * distance;
   const pz = z - Math.cos(angle) * distance;
   player.teleport(px, pz);
@@ -140,11 +140,42 @@ test('combat boots with a weapon, health and a dummy range', async (t) => {
     assert.equal(document.querySelector('.ammo__kills').textContent, 'KILLS 0');
   });
 
-  await t.test('the menu opens over combat and Deploy starts the match', () => {
+  await t.test('the menu opens over combat and Enter Island starts the run', () => {
     assert.equal(game.status, 'paused');
     document.querySelector('#ui-root .button').click();
     assert.equal(game.status, 'running');
     advance(game, 0.1);
+  });
+
+  await t.test('initial spawn protection is granted once and expires normally', () => {
+    assert.equal(combat.isProtected, true, 'entry protection is active');
+    const protectedHit = combat.damagePlayer(30, { source: 'test' });
+    assert.equal(protectedHit.ignored, true);
+    assert.equal(combat.health, combat.maxHealth);
+    advance(game, 1.5);
+    assert.equal(combat.isProtected, false, 'protection is not reapplied');
+    assert.equal(combat.health, combat.maxHealth);
+  });
+
+  await t.test('ADS aligns the rifle bore with the camera and the support hand with its foregrip', async () => {
+    const { Vector3 } = await import('three');
+    const view = S('characterView');
+    key(window, 'keydown', 'KeyQ');
+    advance(game, 1);
+    key(window, 'keyup', 'KeyQ');
+
+    assert.ok(combat.aimBlend > 0.9);
+    assert.ok(combat.weaponView.aim > 0.9);
+    const model = combat.weaponView.model;
+    model.updateWorldMatrix(true, false);
+    const bore = new Vector3(0, 0, -1).transformDirection(model.matrixWorld);
+    const cameraForward = camera.camera.getWorldDirection(new Vector3());
+    assert.ok(bore.dot(cameraForward) > 0.88, `bore follows camera (${bore.dot(cameraForward).toFixed(3)})`);
+
+    const support = model.getObjectByName('support-grip');
+    const supportPosition = support.getWorldPosition(new Vector3());
+    const leftHandPosition = view.arms.left.hand.getWorldPosition(new Vector3());
+    assert.ok(supportPosition.distanceTo(leftHandPosition) < 0.09, 'left hand meets the support grip');
   });
 
   await t.test('mouse fire hits a training dummy, with tracer and hit marker', () => {
@@ -223,8 +254,19 @@ test('combat boots with a weapon, health and a dummy range', async (t) => {
     assert.equal(Number(marker.style.opacity) || 0, 0, 'hit marker fades out');
   });
 
-  await t.test('bullets are stopped by cover', () => {
-    const tower = { x: 0, y: 2.5, z: -15 }; // arena tower: solid, 6m tall
+  await t.test('shots collide with a solid POI building wall', () => {
+    const world = S('world');
+    const wall = world.islandMap.boxes.find((box) => box.name.startsWith('central-city-0-rear'));
+    assert.ok(wall, 'a real building wall is registered');
+    const outward = { x: -Math.sin(wall.yaw), z: Math.cos(wall.yaw) };
+    const standOff = wall.half.z + 8;
+    const shooterX = wall.center.x + outward.x * standOff;
+    const shooterZ = wall.center.z + outward.z * standOff;
+    const behindWall = {
+      x: wall.center.x - outward.x * (wall.half.z + 4),
+      y: wall.center.y,
+      z: wall.center.z - outward.z * (wall.half.z + 4),
+    };
     const impacts = [];
     const hits = [];
     const off = [
@@ -232,17 +274,17 @@ test('combat boots with a weapon, health and a dummy range', async (t) => {
       game.bus.on('combat:hit', (payload) => hits.push(payload)),
     ];
 
-    // Stand 10m from the tower and put the wall between us and the far side.
-    player.teleport(0, -5);
+    player.teleport(shooterX, shooterZ);
     advance(game, 0.25);
-    aimAt(tower);
+    aimAt(behindWall);
     holdFire(0.3);
     fromTheBus(off);
 
-    assert.ok(impacts.length >= 2, `expected wall impacts, got ${impacts.length}`);
-    assert.equal(hits.length, 0, 'nothing behind the wall was hit');
-    assert.ok(impacts[0].normal, 'impacts carry a surface normal');
-    assert.ok(impacts[0].normal.z > 0.5, 'the normal faces the shooter');
+    assert.ok(impacts.length >= 2, `expected building impacts, got ${impacts.length}`);
+    assert.equal(hits.length, 0, 'shots do not pass through the building');
+    const normal = impacts[0].normal;
+    assert.ok(normal, 'impacts carry a surface normal');
+    assert.ok(normal.x * outward.x + normal.z * outward.z > 0.35, 'impact normal faces the shooter');
   });
 
   await t.test('a dummy dies, drops, respawns, and the HUD counts the kill', () => {
@@ -406,91 +448,12 @@ test('combat boots with a weapon, health and a dummy range', async (t) => {
     touch.setVisible(false);
   });
 
-  await t.test('spawn protection absorbs damage, then health drops and the HUD reacts', () => {
-    // Protection is granted on every respawn (and at boot).
-    player.respawn();
-    advance(game, 1 / 60);
-    assert.equal(combat.isProtected, true);
-
-    const absorbed = combat.damagePlayer(30, { source: 'test' });
-    assert.equal(absorbed.ignored, true);
-    assert.equal(combat.health, 100);
-
-    advance(game, 1.5); // protection expires
-    assert.equal(combat.isProtected, false);
-
-    const hurt = [];
-    const off = [game.bus.on('combat:player:hurt', (payload) => hurt.push(payload))];
-    const applied = combat.damagePlayer(30, { source: 'test' });
-    fromTheBus(off);
-
-    assert.equal(applied.applied, 30);
-    assert.equal(combat.health, 70);
-    assert.equal(hurt.length, 1);
-    assert.equal(hurt[0].health, 70);
-
-    combatHudRefresh();
-    assert.equal(document.querySelector('.vitals__value').textContent, '70');
-    assert.ok(Number(document.querySelector('.damage-vignette').style.opacity) > 0, 'damage vignette flashes');
-  });
-
   await t.test('the debug key hurts the player through the real input path', () => {
     const before = combat.health;
     key(window, 'keydown', 'KeyH');
     key(window, 'keyup', 'KeyH');
     advance(game, 1 / 60);
     assert.equal(combat.health, before - 25);
-  });
-
-  await t.test('losing all health eliminates the player and locks control', () => {
-    const eliminations = [];
-    const off = [game.bus.on('combat:player:eliminated', (payload) => eliminations.push(payload))];
-
-    combat.damagePlayer(1000, { source: 'test' });
-    advance(game, 1 / 60);
-    fromTheBus(off);
-
-    assert.equal(combat.health, 0);
-    assert.equal(combat.isEliminated, true);
-    assert.equal(eliminations.length, 1);
-    assert.equal(player.controllable, false, 'the pawn stops taking input');
-
-    // Movement and shooting are dead.
-    const position = player.position.clone();
-    const shots = combat.stats.shots;
-    key(window, 'keydown', 'KeyW');
-    holdFire(0.3);
-    key(window, 'keyup', 'KeyW');
-    advance(game, 0.2);
-    assert.ok(Math.hypot(position.x - player.position.x, position.z - player.position.z) < 0.4, 'no movement');
-    assert.equal(combat.stats.shots, shots, 'no shooting while eliminated');
-
-    // HUD: banner + dimmed reticle.
-    combatHudRefresh();
-    assert.equal(document.querySelector('.banner').classList.contains('banner--hidden'), false);
-    assert.ok(document.querySelector('.banner__sub').textContent.includes('Respawn'));
-  });
-
-  await t.test('respawning restores health, ammo and control', () => {
-    const restored = [];
-    const off = [game.bus.on('combat:player:restored', (payload) => restored.push(payload))];
-
-    player.respawn();
-    advance(game, 0.5);
-    fromTheBus(off);
-
-    assert.equal(restored.length, 1);
-    assert.equal(combat.isEliminated, false);
-    assert.equal(combat.health, combat.maxHealth);
-    assert.equal(combat.ammo.magazine, combat.weapon.type.magazineSize);
-    assert.equal(player.controllable, true);
-    assert.equal(combat.isProtected, true, 'respawn grants protection again');
-    assert.equal(document.querySelector('.banner').classList.contains('banner--hidden'), true);
-
-    key(window, 'keydown', 'KeyW');
-    advance(game, 0.4);
-    key(window, 'keyup', 'KeyW');
-    assert.ok(player.speed > 2, 'can move again');
   });
 
   await t.test('fall damage is applied through the landing event', () => {
@@ -658,16 +621,48 @@ test('combat boots with a weapon, health and a dummy range', async (t) => {
     assert.equal(Number.isFinite(combat.health), true);
     assert.ok(combat.ammo.magazine >= 0 && combat.ammo.magazine <= combat.ammo.magazineSize);
     assert.ok(targets.aliveCount >= 0 && targets.aliveCount <= targets.dummies.length);
-    // The world is still consistent after all that.
-    player.respawn();
-    advance(game, 0.5);
+    // The world remains consistent; validation must not need a player reset.
     assert.equal(S('world').collider.isClear(player.position.x, player.position.z, player.position.y, player.body), true);
   });
 
-  await t.test('resetAll stands every dummy back up', () => {
+  await t.test('resetAll stands every training dummy back up', () => {
     targets.resetAll();
     advance(game, 0.2);
     assert.equal(targets.aliveCount, targets.dummies.length);
+  });
+
+  await t.test('player elimination is final for the run; there is no respawn route', () => {
+    const eliminations = [];
+    const restored = [];
+    const off = [
+      game.bus.on('combat:player:eliminated', (payload) => eliminations.push(payload)),
+      game.bus.on('combat:player:restored', (payload) => restored.push(payload)),
+    ];
+    assert.ok(combat.health > 0, 'the player is alive before the final elimination test');
+    combat.damagePlayer(combat.health + 1000, { source: 'test' });
+    advance(game, 1 / 60);
+    fromTheBus(off);
+
+    assert.equal(combat.health, 0);
+    assert.equal(combat.isEliminated, true);
+    assert.equal(eliminations.length, 1);
+    assert.equal(player.controllable, false, 'the pawn stops taking input');
+    assert.equal(typeof player.respawn, 'undefined');
+    assert.equal(typeof combat.respawnPlayer, 'undefined');
+    assert.equal(document.querySelectorAll('#ui-root .button').length, 1, 'the menu has no respawn action');
+
+    const position = player.position.clone();
+    const shots = combat.stats.shots;
+    key(window, 'keydown', 'KeyW');
+    holdFire(0.3);
+    key(window, 'keyup', 'KeyW');
+    advance(game, 0.2);
+    assert.ok(Math.hypot(position.x - player.position.x, position.z - player.position.z) < 0.4, 'no movement after elimination');
+    assert.equal(combat.stats.shots, shots, 'no firing after elimination');
+    assert.equal(restored.length, 0, 'health, ammo and control are never restored');
+    combatHudRefresh();
+    assert.equal(document.querySelector('.banner').classList.contains('banner--hidden'), false);
+    assert.ok(document.querySelector('.banner__sub').textContent.includes('out for this run'));
   });
 
   game.dispose();

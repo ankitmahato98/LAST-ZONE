@@ -59,16 +59,19 @@ export class PlayerController {
 
   // ------------------------------------------------------------------ api --
 
-  respawn(position, yaw = 0) {
+  placeAt(position, yaw = 0) {
     const st = this.state;
     st.position.copy(position);
     st.velocity.set(0, 0, 0);
     st.yaw = yaw;
     st.speed = 0;
     st.onGround = true;
+    st.moving = false;
+    st.sprinting = false;
     st.jumpBuffer = 0;
     st.coyote = this.config.coyoteTime;
-    this.events.emit('respawn', { position: st.position });
+    st.airTime = 0;
+    this.events.emit('placed', { position: st.position });
   }
 
   teleport(x, y, z) {

@@ -218,7 +218,7 @@ export class CombatEffects {
     }
   }
 
-  /** Clears every live effect - used on respawn and by tests. */
+  /** Clears every live combat effect, primarily for teardown and tests. */
   clear() {
     for (const tracer of this._tracers) {
       tracer.life = 0;

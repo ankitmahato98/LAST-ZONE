@@ -78,6 +78,13 @@ function buildRifle() {
   muzzle.position.set(0, 0.005, -0.96);
   group.add(muzzle);
 
+  // Grip target for the articulated support hand; CombatSystem keeps this
+  // foregrip aligned as the weapon blends between carry and ADS poses.
+  const supportGrip = new THREE.Object3D();
+  supportGrip.name = 'support-grip';
+  supportGrip.position.set(-0.12, -0.025, -0.3);
+  group.add(supportGrip);
+
   group.userData.muzzle = muzzle;
   group.userData.materials = Object.values(materials);
   group.userData.tracerColor = 0xffe6a8;

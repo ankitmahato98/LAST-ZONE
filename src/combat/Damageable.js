@@ -50,7 +50,7 @@ export class Damageable {
 
     /** Portion of the hitbox treated as a head (for damage multipliers). */
     this.headHeightFraction = 0.84;
-    /** Set by the owner when it wants to be unhittable (respawning, hidden). */
+    /** Set by the owner when it wants this target hidden or temporarily unhittable. */
     this.enabled = true;
   }
 
