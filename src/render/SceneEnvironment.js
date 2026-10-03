@@ -49,7 +49,7 @@ export class SceneEnvironment {
     );
 
     // --- Sun -------------------------------------------------------------
-    this.sun = new THREE.DirectionalLight(0xfff0d4, 2.7);
+    this.sun = new THREE.DirectionalLight(0xfff1dc, 2.35);
     this.sun.position.copy(this._sunOffset);
     this.sun.castShadow = this.config.shadows && this.quality.shadowMapSize > 0;
     this.sun.shadow.mapSize.set(this.quality.shadowMapSize, this.quality.shadowMapSize);
@@ -70,8 +70,8 @@ export class SceneEnvironment {
     cam.updateProjectionMatrix();
 
     // --- Sky bounce + ground bounce --------------------------------------
-    this.hemisphere = new THREE.HemisphereLight(0xbfd9f2, 0x4f5b46, 1.05);
-    this.ambient = new THREE.AmbientLight(0xffffff, 0.12);
+    this.hemisphere = new THREE.HemisphereLight(0xc5dcf0, 0x5a624c, 0.95);
+    this.ambient = new THREE.AmbientLight(0xe8f0f4, 0.16);
 
     scene.add(this.sun, this.sun.target, this.hemisphere, this.ambient);
 

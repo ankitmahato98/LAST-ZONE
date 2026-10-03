@@ -3,7 +3,7 @@ import { TERRAIN } from '../config/settings.js';
 import { ValueNoise2D } from '../utils/noise.js';
 import { hashSeed } from '../utils/rng.js';
 import { clamp, smoothstep } from '../utils/math.js';
-import { FOREST_PATCHES, MOUNTAIN_RANGES, POI_DEFINITIONS, RIVER_PATH } from './MapData.js';
+import { FOREST_PATCHES, MOUNTAIN_RANGES, POI_DEFINITIONS, RIVER_PATH, ROAD_NETWORK } from './MapData.js';
 
 /**
  * Deterministic analytic heightfield for the LAST ZONE island.
@@ -272,18 +272,24 @@ export class Terrain {
     for (const patch of FOREST_PATCHES) {
       const distance = Math.hypot(x - patch.center[0], z - patch.center[1]);
       const forest = 1 - smoothstep(patch.radius * 0.48, patch.radius, distance);
-      if (forest > 0) color.lerp(FOREST_GREEN, forest * 0.38);
+      if (forest > 0) color.lerp(FOREST_GREEN, forest * 0.42);
     }
     for (const poi of POI_DEFINITIONS) {
-      if (poi.theme !== 'farm') continue;
       const distance = Math.hypot(x - poi.center[0], z - poi.center[1]);
-      const fieldWeight = 1 - smoothstep(poi.radius * 0.42, poi.radius * 1.5, distance);
-      if (fieldWeight > 0) color.lerp(field, fieldWeight * 0.58);
+      const inner = 1 - smoothstep(poi.flattenRadius * 0.2, poi.radius * 1.15, distance);
+      if (inner <= 0) continue;
+      if (poi.theme === 'farm') color.lerp(field, inner * 0.7);
+      else if (poi.theme === 'urban') color.lerp(URBAN, inner * 0.72);
+      else if (poi.theme === 'industrial' || poi.theme === 'power') color.lerp(INDUSTRIAL, inner * 0.65);
+      else if (poi.theme === 'military') color.lerp(MILITARY, inner * 0.58);
+      else if (poi.theme === 'quarry') color.lerp(QUARRY, inner * 0.75);
+      else if (poi.theme === 'harbor') color.lerp(sand, inner * 0.45);
     }
 
-    color.lerp(rock, smoothstep(0.36, 0.78, slope));
-    color.lerp(rock, smoothstep(105, 205, y) * 0.55);
-    color.lerp(sand, 1 - smoothstep(24, 88, coast));
+    color.lerp(DIRT, roadProximity(x, z) * 0.85);
+    color.lerp(rock, smoothstep(0.32, 0.74, slope));
+    color.lerp(rock, smoothstep(95, 210, y) * 0.62);
+    color.lerp(sand, 1 - smoothstep(18, 96, coast));
 
     const river = this._sampleRiver(x, z);
     color.lerp(WET_GRASS, (1 - smoothstep(13, 38, river.distance)) * 0.82);
@@ -312,6 +318,30 @@ const ROCK_LIGHT = new THREE.Color('#96958b');
 const SAND = new THREE.Color('#a58d62');
 const SAND_LIGHT = new THREE.Color('#d2bb85');
 const WET_GRASS = new THREE.Color('#47664d');
+const DIRT = new THREE.Color('#6e5b3c');
+const URBAN = new THREE.Color('#6a6862');
+const INDUSTRIAL = new THREE.Color('#5a564c');
+const MILITARY = new THREE.Color('#4f5746');
+const QUARRY = new THREE.Color('#8a7a62');
+
+function roadProximity(x, z) {
+  let nearest = 80;
+  for (const road of ROAD_NETWORK) {
+    const half = (road.width ?? 10) * 0.65;
+    for (let i = 0; i < road.points.length - 1; i += 1) {
+      const a = road.points[i];
+      const b = road.points[i + 1];
+      const dx = b[0] - a[0];
+      const dz = b[1] - a[1];
+      const lengthSq = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / lengthSq));
+      const dist = Math.hypot(x - (a[0] + dx * t), z - (a[1] + dz * t));
+      if (dist < nearest) nearest = dist;
+      if (nearest < half) return 1;
+    }
+  }
+  return 1 - smoothstep(6, 22, nearest);
+}
 
 function mixColor(a, b, t) {
   return a.clone().lerp(b, t);

@@ -28,16 +28,16 @@ const BUILDING_LOOT_KIND = {
 };
 
 const THEMES = {
-  urban: { count: 12, wall: 'brickWarm', roof: 'roofSlate', trim: 'concreteDark', window: 'windowGlass', radius: 158, landmark: 'tower', landmarkOffset: [0, -42] },
-  industrial: { count: 8, wall: 'metalPainted', roof: 'roofMetal', trim: 'metal', window: 'windowGlass', radius: 140, landmark: 'chimney', landmarkOffset: [20, 0] },
-  military: { count: 8, wall: 'concreteDark', roof: 'roofOlive', trim: 'metal', window: 'windowGlass', radius: 150, landmark: 'mast', landmarkOffset: [0, 28] },
-  harbor: { count: 7, wall: 'harborWood', roof: 'roofRed', trim: 'metal', window: 'windowGlass', radius: 132, landmark: 'crane', landmarkOffset: [38, -8] },
-  riverside: { count: 8, wall: 'stuccoCream', roof: 'roofRed', trim: 'woodDark', window: 'windowGlass', radius: 126, landmark: 'watertower', landmarkOffset: [-5, -28] },
-  hilltop: { count: 7, wall: 'stoneWarm', roof: 'roofSlate', trim: 'concreteDark', window: 'windowGlass', radius: 126, landmark: 'chapel', landmarkOffset: [0, 0] },
-  forest: { count: 6, wall: 'forestTimber', roof: 'roofForest', trim: 'woodDark', window: 'windowGlass', radius: 116, landmark: 'lookout', landmarkOffset: [-18, 16] },
-  power: { count: 7, wall: 'concreteDark', roof: 'roofMetal', trim: 'metal', window: 'windowGlass', radius: 140, landmark: 'stacks', landmarkOffset: [0, 24] },
-  quarry: { count: 6, wall: 'stoneCool', roof: 'roofMetal', trim: 'metal', window: 'windowGlass', radius: 154, landmark: 'gantry', landmarkOffset: [18, -22] },
-  farm: { count: 8, wall: 'stuccoOchre', roof: 'roofRed', trim: 'woodDark', window: 'windowGlass', radius: 148, landmark: 'windmill', landmarkOffset: [18, 18] },
+  urban: { count: 16, wall: 'brickWarm', roof: 'roofSlate', trim: 'concreteDark', window: 'windowGlass', radius: 168, landmark: 'tower', landmarkOffset: [0, -42] },
+  industrial: { count: 10, wall: 'metalPainted', roof: 'roofMetal', trim: 'metal', window: 'windowGlass', radius: 148, landmark: 'chimney', landmarkOffset: [20, 0] },
+  military: { count: 10, wall: 'concreteDark', roof: 'roofOlive', trim: 'metal', window: 'windowGlass', radius: 158, landmark: 'mast', landmarkOffset: [0, 28] },
+  harbor: { count: 9, wall: 'harborWood', roof: 'roofRed', trim: 'metal', window: 'windowGlass', radius: 140, landmark: 'crane', landmarkOffset: [38, -8] },
+  riverside: { count: 9, wall: 'stuccoCream', roof: 'roofRed', trim: 'woodDark', window: 'windowGlass', radius: 132, landmark: 'watertower', landmarkOffset: [-5, -28] },
+  hilltop: { count: 8, wall: 'stoneWarm', roof: 'roofSlate', trim: 'concreteDark', window: 'windowGlass', radius: 132, landmark: 'chapel', landmarkOffset: [0, 0] },
+  forest: { count: 7, wall: 'forestTimber', roof: 'roofForest', trim: 'woodDark', window: 'windowGlass', radius: 122, landmark: 'lookout', landmarkOffset: [-18, 16] },
+  power: { count: 8, wall: 'concreteDark', roof: 'roofMetal', trim: 'metal', window: 'windowGlass', radius: 146, landmark: 'stacks', landmarkOffset: [0, 24] },
+  quarry: { count: 7, wall: 'stoneCool', roof: 'roofMetal', trim: 'metal', window: 'windowGlass', radius: 160, landmark: 'gantry', landmarkOffset: [18, -22] },
+  farm: { count: 9, wall: 'stuccoOchre', roof: 'roofRed', trim: 'woodDark', window: 'windowGlass', radius: 154, landmark: 'windmill', landmarkOffset: [18, 18] },
 };
 
 /**
@@ -155,6 +155,7 @@ export class IslandMap {
       this.buildingCount += catalog.structureCount;
       this._buildPOIWalkways(poi, buildingAnchors);
       this._buildCover(poi, random);
+      this._buildThemeIdentity(poi, random);
       this._buildLandmark(poi, theme);
       this._buildOutdoorLootAnchors(poi, random);
     }
@@ -369,6 +370,56 @@ export class IslandMap {
         this._addCylinder({
           x, z, y: groundY, radius: 0.62, height: 1.55,
           material: 'metal', name: `${poi.id}-barrel-${i}`,
+        });
+      }
+      this.coverCount += 1;
+    }
+  }
+
+  _buildThemeIdentity(poi, random) {
+    const theme = poi.theme;
+    const extras = theme === 'urban' ? 10 : theme === 'harbor' || theme === 'military' || theme === 'industrial' ? 8 : 6;
+    for (let i = 0; i < extras; i += 1) {
+      const angle = (i / extras) * Math.PI * 2 + random.range(-0.15, 0.15);
+      const radius = poi.radius * random.range(0.22, 0.62);
+      const x = poi.center[0] + Math.cos(angle) * radius;
+      const z = poi.center[1] + Math.sin(angle) * radius;
+      if (!this.terrain.isLandAt(x, z, 8)) continue;
+      const groundY = this.terrain.heightAt(x, z);
+      const yaw = angle + Math.PI / 2;
+      if (theme === 'harbor' && i % 2 === 0) {
+        this._addBox({
+          center: { x, y: groundY + 1.1, z },
+          size: [6.2, 2.2, 2.4], yaw, material: 'crateMetal', name: `${poi.id}-container-${i}`, walkable: true,
+        });
+      } else if (theme === 'military') {
+        this._addBox({
+          center: { x, y: groundY + 0.9, z },
+          size: [4.4, 1.8, 1.1], yaw, material: 'sandbag', name: `${poi.id}-bunker-${i}`,
+        });
+      } else if (theme === 'farm') {
+        this._addBox({
+          center: { x, y: groundY + 0.85, z },
+          size: [3.6, 1.7, 1.4], yaw, material: 'crateWood', name: `${poi.id}-bale-${i}`, walkable: true,
+        });
+      } else if (theme === 'industrial' || theme === 'power') {
+        this._addCylinder({
+          x, z, y: groundY, radius: 1.15, height: 3.4, material: 'metalPainted', name: `${poi.id}-tank-${i}`,
+        });
+      } else if (theme === 'quarry') {
+        this._addBox({
+          center: { x, y: groundY + 1.4, z },
+          size: [3.2, 2.8, 2.6], yaw, material: 'stoneCool', name: `${poi.id}-block-${i}`, walkable: true,
+        });
+      } else if (theme === 'urban') {
+        this._addBox({
+          center: { x, y: groundY + 0.55, z },
+          size: [1.6, 1.1, 0.55], yaw, material: 'concreteDark', name: `${poi.id}-kiosk-${i}`,
+        });
+      } else {
+        this._addBox({
+          center: { x, y: groundY + 0.7, z },
+          size: [2.4, 1.4, 0.7], yaw, material: 'woodDark', name: `${poi.id}-fence-${i}`,
         });
       }
       this.coverCount += 1;

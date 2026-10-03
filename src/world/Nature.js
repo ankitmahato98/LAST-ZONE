@@ -136,12 +136,12 @@ export class Nature {
     });
     if (spots.length === 0) return;
 
-    const trunkGeometry = new THREE.CylinderGeometry(0.22, 0.34, 4.4, 7);
-    trunkGeometry.translate(0, 2.2, 0);
-    const lowerGeometry = new THREE.ConeGeometry(2.3, 4.2, 8);
-    lowerGeometry.translate(0, 4.6, 0);
-    const upperGeometry = new THREE.ConeGeometry(1.55, 3.4, 8);
-    upperGeometry.translate(0, 6.6, 0);
+    const trunkGeometry = new THREE.CylinderGeometry(0.18, 0.32, 4.6, 8);
+    trunkGeometry.translate(0, 2.3, 0);
+    const lowerGeometry = new THREE.SphereGeometry(2.05, 8, 6);
+    lowerGeometry.translate(0, 4.8, 0);
+    const upperGeometry = new THREE.SphereGeometry(1.45, 8, 6);
+    upperGeometry.translate(0, 6.5, 0);
 
     const trunks = new THREE.InstancedMesh(trunkGeometry, getMaterial('bark'), spots.length);
     const lower = new THREE.InstancedMesh(lowerGeometry, getMaterial('leaves'), spots.length);

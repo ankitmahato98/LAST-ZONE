@@ -12,8 +12,8 @@ import { isCoarsePointer } from '../utils/dom.js';
 export const RENDER = {
   /** Hard cap on device pixel ratio - mobile GPUs choke above ~2x. */
   maxPixelRatio: 2,
-  fov: 62,
-  fovSprintBoost: 7,
+  fov: 68,
+  fovSprintBoost: 6,
   near: 0.15,
   /** Long enough to reveal the island ridgelines; fog handles the far horizon. */
   far: 3200,
@@ -22,8 +22,8 @@ export const RENDER = {
   shadowRadius: 68,
   /** Scene fog fades the 4 km island into the sea/sky horizon. */
   fogColor: 0xa8c4d8,
-  fogNear: 850,
-  fogFar: 2850,
+  fogNear: 720,
+  fogFar: 2700,
 };
 
 export const QUALITY = {
@@ -116,8 +116,8 @@ export const PLAYER = {
 
 export const CAMERA = {
   /** Pivot sits slightly above the player's eye line. */
-  pivotHeight: 1.55,
-  distance: 6.2,
+  pivotHeight: 1.48,
+  distance: 7.6,
   minDistance: 2.2,
   maxDistance: 13,
   zoomStep: 0.9,

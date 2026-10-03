@@ -176,15 +176,21 @@ body[data-touch='true'] .hud__brand {
   position: absolute;
   left: calc(14px + var(--lz-safe-left));
   bottom: calc(12px + var(--lz-safe-bottom));
-  padding: 8px 12px;
+  padding: 5px 9px;
   border-radius: 8px;
-  background: var(--lz-panel);
-  border: 1px solid var(--lz-border);
+  background: rgba(8, 14, 18, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--lz-text-dim);
-  font-size: 0.74rem;
-  line-height: 1.55;
-  max-width: min(58vw, 460px);
-  backdrop-filter: blur(6px);
+  font-size: 0.62rem;
+  line-height: 1.4;
+  max-width: min(42vw, 340px);
+  backdrop-filter: blur(4px);
+}
+
+@media (pointer: coarse) {
+  .hud__hint {
+    display: none;
+  }
 }
 
 .hud__hint kbd {
@@ -446,10 +452,10 @@ body[data-touch='true'] .hud__brand {
 .touch__stick {
   position: absolute;
   pointer-events: none;
-  left: calc(26px + var(--lz-safe-left));
-  bottom: calc(30px + var(--lz-safe-bottom));
-  width: 138px;
-  height: 138px;
+  left: calc(18px + var(--lz-safe-left));
+  bottom: calc(22px + var(--lz-safe-bottom));
+  width: 112px;
+  height: 112px;
   border-radius: 50%;
   border: 2px solid rgba(160, 220, 255, 0.32);
   background: radial-gradient(circle, rgba(12, 24, 32, 0.42) 0%, rgba(12, 24, 32, 0.16) 70%);
@@ -460,9 +466,9 @@ body[data-touch='true'] .hud__brand {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 58px;
-  height: 58px;
-  margin: -29px 0 0 -29px;
+  width: 46px;
+  height: 46px;
+  margin: -23px 0 0 -23px;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.6), rgba(78, 240, 200, 0.45));
   border: 1px solid rgba(255, 255, 255, 0.5);
@@ -480,8 +486,9 @@ body[data-touch='true'] .hud__brand {
 }
 
 .touch__button {
-  width: 82px;
-  height: 82px;
+  width: 64px;
+  height: 64px;
+  background: rgba(12, 24, 32, 0.22);
   border-radius: 50%;
   border: 2px solid rgba(160, 220, 255, 0.32);
   background: rgba(12, 24, 32, 0.36);
@@ -499,8 +506,8 @@ body[data-touch='true'] .hud__brand {
 }
 
 .touch__button--primary {
-  width: 96px;
-  height: 96px;
+  width: 74px;
+  height: 74px;
   background: rgba(78, 240, 200, 0.2);
   border-color: rgba(78, 240, 200, 0.45);
 }
@@ -674,14 +681,14 @@ body[data-touch='true'] .hud__brand {
 
 .vitals {
   position: absolute;
-  left: calc(18px + var(--lz-safe-left));
-  bottom: calc(20px + var(--lz-safe-bottom));
-  width: min(290px, 38vw);
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--lz-panel);
-  border: 1px solid var(--lz-border);
-  backdrop-filter: blur(6px);
+  left: calc(12px + var(--lz-safe-left));
+  bottom: calc(14px + var(--lz-safe-bottom));
+  width: min(168px, 28vw);
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(8, 14, 18, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(4px);
   transition: opacity 200ms ease;
 }
 
@@ -697,13 +704,13 @@ body[data-touch='true'] .hud__brand {
 
 .vitals__value {
   font-family: var(--lz-mono);
-  font-size: 1.05rem;
+  font-size: 0.78rem;
   color: var(--lz-text);
 }
 
 .vitals__bar {
-  margin-top: 7px;
-  height: 9px;
+  margin-top: 3px;
+  height: 6px;
   border-radius: 5px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.09);
@@ -725,14 +732,14 @@ body[data-touch='true'] .hud__brand {
 
 .ammo {
   position: absolute;
-  right: calc(18px + var(--lz-safe-right));
-  bottom: calc(20px + var(--lz-safe-bottom));
-  min-width: 168px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--lz-panel);
-  border: 1px solid var(--lz-border);
-  backdrop-filter: blur(6px);
+  right: calc(12px + var(--lz-safe-right));
+  bottom: calc(14px + var(--lz-safe-bottom));
+  min-width: 110px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(8, 14, 18, 0.38);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(4px);
   text-align: right;
   transition: opacity 200ms ease;
 }
@@ -746,7 +753,7 @@ body[data-touch='true'] .hud__brand {
 
 .ammo__count {
   font-family: var(--lz-mono);
-  font-size: 1.55rem;
+  font-size: 1.15rem;
   line-height: 1.25;
   color: var(--lz-text);
 }
@@ -855,8 +862,8 @@ body[data-touch='true'] .hud__brand {
 }
 
 .touch__button--small {
-  width: 62px;
-  height: 62px;
+  width: 48px;
+  height: 48px;
   font-size: 0.6rem;
   letter-spacing: 0.08em;
 }
@@ -864,12 +871,12 @@ body[data-touch='true'] .hud__brand {
 @media (max-width: 520px) {
   .vitals,
   .ammo {
-    bottom: calc(150px + var(--lz-safe-bottom));
-    padding: 9px 11px;
+    bottom: calc(108px + var(--lz-safe-bottom));
+    padding: 5px 7px;
   }
 
   .vitals {
-    width: 40vw;
+    width: 34vw;
   }
 
   .ammo__count {
@@ -900,7 +907,7 @@ body[data-touch='true'] .hud__brand {
 
 /* Overrides the removed Phase A single-bar block: two stacked bars now. */
 .vitals__row--ep {
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 .vitals__value--ep {
@@ -913,8 +920,8 @@ body[data-touch='true'] .hud__brand {
 }
 
 .vitals__conversion {
-  margin-top: 8px;
-  font-size: 0.6rem;
+  margin-top: 4px;
+  font-size: 0.52rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--lz-text-dim);
@@ -935,17 +942,24 @@ body[data-touch='true'] .hud__brand {
 
 .loadout {
   position: absolute;
-  right: calc(18px + var(--lz-safe-right));
-  bottom: calc(150px + var(--lz-safe-bottom));
-  width: min(214px, 34vw);
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: var(--lz-panel);
-  border: 1px solid var(--lz-border);
-  backdrop-filter: blur(6px);
+  right: calc(12px + var(--lz-safe-right));
+  bottom: calc(92px + var(--lz-safe-bottom));
+  width: min(148px, 26vw);
+  padding: 5px 7px;
+  border-radius: 8px;
+  background: rgba(8, 14, 18, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(4px);
   font-family: var(--lz-mono);
-  font-size: 0.68rem;
+  font-size: 0.58rem;
   color: var(--lz-text);
+}
+
+@media (pointer: coarse) {
+  .loadout {
+    bottom: calc(118px + var(--lz-safe-bottom));
+    opacity: 0.72;
+  }
 }
 
 .loadout__title {

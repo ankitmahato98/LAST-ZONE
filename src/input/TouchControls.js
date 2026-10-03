@@ -21,7 +21,7 @@ import { GameEvents } from '../core/events.js';
  * so nothing in the simulation layer knows which device is driving it.
  */
 const STICK_SOURCE = 'touch';
-const STICK_RADIUS = 62; // px, matches the CSS knob travel
+const STICK_RADIUS = 48; // px, matches the CSS knob travel
 
 export class TouchControls {
   /**
