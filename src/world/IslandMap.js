@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { BoxBlocker, CircleBlocker } from '../physics/Collider.js';
 import { Random } from '../utils/rng.js';
 import { getMaterial } from './materials.js';
+import { createWaterMaterial } from '../render/WaterSurface.js';
 import {
   BRIDGE_SITES,
   POI_DEFINITIONS,
@@ -101,7 +102,7 @@ export class IslandMap {
     }
     geometry.rotateX(-Math.PI / 2);
     geometry.computeVertexNormals();
-    const ocean = new THREE.Mesh(geometry, getMaterial('ocean'));
+    const ocean = new THREE.Mesh(geometry, createWaterMaterial({ quality: this.quality, color: '#2a7a88' }));
     ocean.name = 'surrounding-ocean';
     ocean.position.y = this.terrain.config.seaLevel;
     ocean.receiveShadow = false;

@@ -4,6 +4,7 @@ import { ValueNoise2D } from '../utils/noise.js';
 import { hashSeed } from '../utils/rng.js';
 import { clamp, smoothstep } from '../utils/math.js';
 import { FOREST_PATCHES, MOUNTAIN_RANGES, POI_DEFINITIONS, RIVER_PATH, ROAD_NETWORK } from './MapData.js';
+import { createTerrainMaterial } from '../render/TerrainSurface.js';
 
 /**
  * Deterministic analytic heightfield for the LAST ZONE island.
@@ -243,13 +244,14 @@ export class Terrain {
     }
 
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    if (geometry.attributes.uv) geometry.setAttribute('uv2', geometry.attributes.uv);
     position.needsUpdate = true;
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
 
     this.mesh = new THREE.Mesh(
       geometry,
-      material ?? new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0 }),
+      material ?? createTerrainMaterial(this.quality),
     );
     this.mesh.name = 'terrain';
     this.mesh.receiveShadow = true;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getSurfacePack } from '../../render/ProceduralTextures.js';
 
 /**
  * Procedural weapon models.
@@ -30,15 +31,26 @@ export const weaponModelNames = Object.keys(builders);
 // ---------------------------------------------------------------------------
 
 function buildRifle() {
+  const pbr = (material, kind) => {
+    try {
+      const pack = getSurfacePack(kind, 256);
+      material.map = pack.map;
+      material.normalMap = pack.normalMap;
+      material.roughnessMap = pack.roughnessMap;
+      material.envMapIntensity = 0.9;
+    } catch { /* optional */ }
+    return material;
+  };
   const materials = {
-    body: new THREE.MeshStandardMaterial({ color: '#33383d', roughness: 0.55, metalness: 0.5 }),
-    dark: new THREE.MeshStandardMaterial({ color: '#1c2024', roughness: 0.7, metalness: 0.35 }),
+    body: pbr(new THREE.MeshStandardMaterial({ color: '#3a4046', roughness: 0.42, metalness: 0.55 }), 'metal'),
+    dark: pbr(new THREE.MeshStandardMaterial({ color: '#1a1e22', roughness: 0.62, metalness: 0.28 }), 'metal'),
+    polymer: pbr(new THREE.MeshStandardMaterial({ color: '#2a2e32', roughness: 0.78, metalness: 0.08 }), 'asphalt'),
     accent: new THREE.MeshStandardMaterial({
       color: '#2f6f6a',
       roughness: 0.5,
       metalness: 0.3,
       emissive: new THREE.Color('#123a36'),
-      emissiveIntensity: 0.5,
+      emissiveIntensity: 0.35,
     }),
   };
 
@@ -54,13 +66,14 @@ function buildRifle() {
     return mesh;
   };
 
-  // Receiver + handguard.
-  add(new THREE.BoxGeometry(0.07, 0.11, 0.44), materials.body, [0, 0, -0.16], 'receiver');
-  add(new THREE.BoxGeometry(0.06, 0.06, 0.34), materials.dark, [0, -0.005, -0.48], 'handguard');
-  // Barrel + muzzle brake.
-  add(new THREE.CylinderGeometry(0.014, 0.014, 0.3, 10), materials.dark, [0, 0.005, -0.78], 'barrel');
-  const brake = add(new THREE.CylinderGeometry(0.024, 0.024, 0.07, 10), materials.body, [0, 0.005, -0.92], 'brake');
+  add(new THREE.BoxGeometry(0.065, 0.105, 0.46), materials.body, [0, 0.01, -0.16], 'receiver');
+  add(new THREE.BoxGeometry(0.058, 0.055, 0.36), materials.dark, [0, -0.01, -0.5], 'handguard');
+  add(new THREE.BoxGeometry(0.04, 0.018, 0.42), materials.dark, [0, 0.07, -0.22], 'rail');
+  const barrel = add(new THREE.CylinderGeometry(0.013, 0.013, 0.38, 12), materials.body, [0, 0.012, -0.82], 'barrel');
+  barrel.rotation.x = Math.PI / 2;
+  const brake = add(new THREE.CylinderGeometry(0.022, 0.02, 0.06, 12), materials.body, [0, 0.012, -1.0], 'brake');
   brake.rotation.x = Math.PI / 2;
+  add(new THREE.BoxGeometry(0.08, 0.035, 0.08), materials.polymer, [0, -0.055, 0.04], 'trigger-guard');
   // Magazine, angled forward like a real AR.
   const magazine = add(new THREE.BoxGeometry(0.045, 0.19, 0.09), materials.dark, [0, -0.14, -0.12], 'magazine');
   magazine.rotation.x = -0.18;
@@ -75,7 +88,7 @@ function buildRifle() {
   // Muzzle node: the combat system reads its world transform every shot.
   const muzzle = new THREE.Object3D();
   muzzle.name = 'muzzle';
-  muzzle.position.set(0, 0.005, -0.96);
+  muzzle.position.set(0, 0.012, -1.04);
   group.add(muzzle);
 
   // Grip target for the articulated support hand; CombatSystem keeps this

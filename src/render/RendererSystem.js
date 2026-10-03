@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RENDER, getQualitySettings } from '../config/settings.js';
+import { PostProcess } from './PostProcess.js';
 
 /**
  * Owns the WebGL renderer, the scene graph root and the world camera.
@@ -38,13 +39,21 @@ export class RendererSystem {
     this.actorsGroup.name = 'actors';
     this.scene.add(this.worldGroup, this.actorsGroup);
 
-    this.stats = { calls: 0, triangles: 0, programs: 0 };
+    this.stats = { calls: 0, triangles: 0, programs: 0, postFx: false };
     this._contextLost = false;
+    this.post = null;
   }
 
   init(game) {
     this.game = game;
     this.quality = game.services.get('quality') ?? getQualitySettings();
+    this.post = new PostProcess({
+      renderer: this.renderer,
+      scene: this.scene,
+      camera: this.camera,
+      quality: this.quality,
+    });
+    this.stats.postFx = this.post.enabled;
 
     this.canvas.addEventListener('webglcontextlost', this._onContextLost = (event) => {
       event.preventDefault();
@@ -68,9 +77,11 @@ export class RendererSystem {
    */
   render() {
     if (this._contextLost) return;
-    this.renderer.render(this.scene, this.camera);
+    if (this.post?.enabled) this.post.render();
+    else this.renderer.render(this.scene, this.camera);
     this.stats.calls = this.renderer.info.render.calls;
     this.stats.triangles = this.renderer.info.render.triangles;
+    this.stats.programs = this.renderer.info.programs?.length ?? 0;
   }
 
   resize(width, height, pixelRatio) {
@@ -78,10 +89,12 @@ export class RendererSystem {
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / Math.max(1, height);
     this.camera.updateProjectionMatrix();
+    this.post?.setSize(width, height, pixelRatio);
   }
 
   dispose() {
     this.canvas.removeEventListener('webglcontextlost', this._onContextLost);
+    this.post?.dispose();
     this.renderer.dispose();
   }
 }

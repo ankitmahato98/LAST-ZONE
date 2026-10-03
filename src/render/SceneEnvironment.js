@@ -41,7 +41,12 @@ export class SceneEnvironment {
     this.game = game;
     const { scene } = this;
 
-    scene.background = this._createSkyTexture();
+    const sky = this._createSkyTexture();
+    scene.background = sky;
+    if (sky.isTexture) {
+      scene.environment = sky;
+      scene.environmentIntensity = 0.55;
+    }
     scene.fog = new THREE.Fog(
       new THREE.Color(PALETTE.horizon).getHex(),
       this.config.fogNear,

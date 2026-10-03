@@ -26,6 +26,7 @@ export class Nature {
     this._scatterTrees(this.quality.trees);
     this._scatterRocks(this.quality.rocks);
     if (this.quality.grassTufts > 0) this._scatterGrass(this.quality.grassTufts);
+    if ((this.quality.bushes ?? 0) > 0) this._scatterBushes(this.quality.bushes);
     return this;
   }
 
@@ -176,12 +177,41 @@ export class Nature {
     for (const mesh of [trunks, lower, upper]) {
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-      mesh.castShadow = true;
+      mesh.castShadow = this.quality.treeShadows !== false;
       mesh.receiveShadow = true;
       mesh.computeBoundingSphere();
       this.group.add(mesh);
     }
     this.counts.trees = spots.length;
+  }
+
+  _scatterBushes(count) {
+    const spots = this._pickPositions(count, {
+      biome: 'forest', spacing: 6, maxSlope: 0.5, poiClearance: 18, roadClearance: 12, coastMargin: 18,
+    });
+    if (spots.length === 0) return;
+    const geometry = new THREE.SphereGeometry(0.85, 7, 5);
+    geometry.translate(0, 0.55, 0);
+    const mesh = new THREE.InstancedMesh(geometry, getMaterial('leavesDark'), spots.length);
+    const dummy = new THREE.Object3D();
+    const color = new THREE.Color();
+    for (let i = 0; i < spots.length; i += 1) {
+      const spot = spots[i];
+      const scale = this.random.range(0.7, 1.4);
+      dummy.position.set(spot.x, spot.y, spot.z);
+      dummy.rotation.set(0, this.random.range(0, Math.PI * 2), 0);
+      dummy.scale.set(scale * 1.2, scale * 0.7, scale);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+      color.setRGB(this.random.range(0.7, 1), this.random.range(0.85, 1.1), this.random.range(0.6, 0.9));
+      mesh.setColorAt(i, color);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    this.group.add(mesh);
+    this.counts.bushes = spots.length;
   }
 
   // ---------------------------------------------------------------- rocks --
@@ -193,7 +223,7 @@ export class Nature {
     });
     if (spots.length === 0) return;
 
-    const geometry = new THREE.IcosahedronGeometry(1, 0);
+    const geometry = new THREE.IcosahedronGeometry(1, this.quality.pbrMaps ? 1 : 0);
     const mesh = new THREE.InstancedMesh(geometry, getMaterial('rock'), spots.length);
     const dummy = new THREE.Object3D();
     const color = new THREE.Color();

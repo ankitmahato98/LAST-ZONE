@@ -6,6 +6,7 @@ import { INITIAL_DROP_REGIONS } from './MapData.js';
 import { Random } from '../utils/rng.js';
 import { PLAYER, WORLD } from '../config/settings.js';
 import { nextFrame } from '../utils/dom.js';
+import { tickWater } from '../render/WaterSurface.js';
 
 /** Owns island generation, collision, POI lookup and validated map metadata. */
 export class WorldSystem {
@@ -251,7 +252,8 @@ export class WorldSystem {
 
   // --------------------------------------------------------------- updates --
 
-  update() {
+  update(dt) {
+    tickWater(this.islandMap?.group, dt);
     const player = this.game?.services.get('player');
     if (!player?.position) return;
     const nearby = this.getPoiAt(player.position.x, player.position.z)?.poi ?? null;

@@ -1,5 +1,6 @@
 import { Game } from './Game.js';
 import { RENDER, WORLD, getLaunchFlags, getQualitySettings } from '../config/settings.js';
+import { configureMaterials } from '../world/materials.js';
 
 import { InputSystem } from '../input/InputSystem.js';
 import { KeyboardBindings } from '../input/KeyboardBindings.js';
@@ -83,6 +84,7 @@ export async function createGame({
 
   game.services.register('loading', loading);
   game.services.register('quality', quality);
+  configureMaterials({ pbr: quality.pbrMaps !== false, size: quality.textureSize ?? 256 });
 
   // --- Input ------------------------------------------------------------
   // Keyboard/mouse and touch both write into the same intent object, so the

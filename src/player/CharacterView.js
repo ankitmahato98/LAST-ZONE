@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clamp, damp, dampAngle } from '../utils/math.js';
+import { getSurfacePack } from '../render/ProceduralTextures.js';
+import { CHARACTER_GLB_URL, loadOptionalGltf, findBone, applyIdleMixer } from './CharacterAssets.js';
 
 /**
  * Original low-poly field-operative avatar, built from a compact articulated
@@ -26,12 +28,16 @@ export class CharacterView {
     this._rightCombined = new THREE.Quaternion();
     this._tmpWorld = new THREE.Vector3();
     this._tmpLocal = new THREE.Vector3();
+    this.mixer = null;
+    this.usingGltf = false;
   }
 
-  init(game) {
+  async init(game) {
     this.game = game;
     const renderer = game.services.require('renderer');
-    this._buildBody();
+    const gltf = await loadOptionalGltf(CHARACTER_GLB_URL);
+    if (gltf?.scene) this._mountGltf(gltf);
+    else this._buildBody();
     renderer.actorsGroup.add(this.root);
 
     this.player = game.services.get('player');
@@ -60,12 +66,28 @@ export class CharacterView {
       return result;
     };
 
+    const dress = (mat, kind, repeat = 2) => {
+      const quality = this.game?.services?.get('quality');
+      if (quality?.pbrMaps === false) return mat;
+      try {
+        const pack = getSurfacePack(kind, quality?.textureSize ?? 256);
+        mat.map = pack.map;
+        mat.normalMap = pack.normalMap;
+        mat.roughnessMap = pack.roughnessMap;
+        mat.map.repeat.set(repeat, repeat);
+        mat.normalMap.repeat.set(repeat, repeat);
+        mat.roughnessMap.repeat.set(repeat, repeat);
+        mat.envMapIntensity = 0.45;
+      } catch { /* maps optional when canvas/data textures are unavailable */ }
+      return mat;
+    };
+
     this.materialsByName = {
-      jacket: material(c.jacket, 0.78, 0.03),
-      armor: material(c.armor, 0.58, 0.18),
-      pants: material(c.pants, 0.9, 0.01),
-      boots: material(c.boots, 0.72, 0.06),
-      skin: material(c.skin, 0.72, 0),
+      jacket: dress(material(c.jacket, 0.78, 0.03), 'fabric', 3),
+      armor: dress(material(c.armor, 0.58, 0.18), 'metal', 2),
+      pants: dress(material(c.pants, 0.9, 0.01), 'fabric', 3),
+      boots: dress(material(c.boots, 0.72, 0.06), 'dirt', 2),
+      skin: dress(material(c.skin, 0.72, 0), 'skin', 1),
       hair: material(c.hair, 0.62, 0.02),
       helmet: material(c.helmet, 0.55, 0.18),
       pack: material(c.pack, 0.82, 0.05),
@@ -170,6 +192,13 @@ export class CharacterView {
     addBox(this.neck, [0.22, 0.035, 0.05], [0, 0.17, -0.1], materials.visor, 'visor');
     mergeStaticMeshes(this.neck);
 
+    const groundContact = part(new THREE.CircleGeometry(0.38, 16), new THREE.MeshBasicMaterial({
+      color: '#000000', transparent: true, opacity: 0.28, depthWrite: false,
+    }));
+    groundContact.rotation.x = -Math.PI / 2;
+    groundContact.position.y = 0.02;
+    this.model.add(groundContact);
+
     this.arms = {
       left: this._buildArm(-1),
       right: this._buildArm(1),
@@ -188,6 +217,26 @@ export class CharacterView {
       child.receiveShadow = true;
       child.frustumCulled = true;
     });
+  }
+
+  _mountGltf(gltf) {
+    this.usingGltf = true;
+    this.model = gltf.scene;
+    this.model.name = `${this.modelName}-gltf`;
+    this.root.add(this.model);
+    this.mixer = applyIdleMixer(gltf);
+    this.hips = findBone(this.model, ['Hips', 'hips', 'pelvis']) ?? this.model;
+    this.neck = findBone(this.model, ['Head', 'head', 'Neck', 'neck']) ?? new THREE.Group();
+    const rightHand = findBone(this.model, ['RightHand', 'hand_r', 'mixamorigRightHand']);
+    const leftHand = findBone(this.model, ['LeftHand', 'hand_l', 'mixamorigLeftHand']);
+    this.arms = {
+      left: { joint: leftHand ?? this.model, elbow: leftHand ?? this.model, hand: leftHand ?? this.model },
+      right: { joint: rightHand ?? this.model, elbow: rightHand ?? this.model, hand: rightHand ?? this.model },
+    };
+    this.legs = {
+      left: { joint: this.model, knee: this.model },
+      right: { joint: this.model, knee: this.model },
+    };
   }
 
   _buildArm(side) {
@@ -318,6 +367,8 @@ export class CharacterView {
     const view = this.view;
     this.root.position.copy(view.position);
     this.model.rotation.y = dampAngle(this.model.rotation.y, view.yaw, 14, dt);
+    this.mixer?.update(dt);
+    if (this.usingGltf) return;
 
     const speedRatio = clamp(view.speed / 8.4, 0, 1.2);
     const targetWalk = view.onGround && view.moving && speedRatio > 0.05 ? 1 : 0;

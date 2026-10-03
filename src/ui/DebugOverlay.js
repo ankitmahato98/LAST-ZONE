@@ -77,6 +77,7 @@ export class DebugOverlay {
 
     const lines = [
       `<b>LAST ZONE</b> ${game.settings.profile} &middot; ${input?.controlMode ?? '-'}`,
+      `quality pbr:${game.settings.quality?.pbrMaps ? 'on' : 'off'} fx:${renderer?.stats.postFx ? 'on' : 'off'} tex ${game.settings.quality?.textureSize ?? '-'}`,
       `fps ${metrics.fps.toFixed(0)}  frame ${metrics.frameMs.toFixed(1)}ms  steps ${metrics.stepsThisFrame}`,
       `draws ${renderer?.stats.calls ?? 0}  tris ${format(renderer?.stats.triangles ?? 0)}`,
       `pos ${state.position.x.toFixed(1)}, ${state.position.y.toFixed(1)}, ${state.position.z.toFixed(1)}`,

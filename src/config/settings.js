@@ -26,23 +26,77 @@ export const RENDER = {
   fogFar: 2700,
 };
 
+const QUALITY_LOW = {
+  maxPixelRatio: 1,
+  shadowMapSize: 512,
+  terrainSegments: 128,
+  trees: 180,
+  rocks: 70,
+  grassTufts: 280,
+  bushes: 40,
+  textureSize: 128,
+  pbrMaps: false,
+  postFx: false,
+  ssao: false,
+  bloom: false,
+  waterWaves: false,
+  treeShadows: false,
+};
+
+const QUALITY_MEDIUM = {
+  maxPixelRatio: 1.5,
+  shadowMapSize: 1024,
+  terrainSegments: 176,
+  trees: 360,
+  rocks: 130,
+  grassTufts: 900,
+  bushes: 90,
+  textureSize: 256,
+  pbrMaps: true,
+  postFx: true,
+  ssao: false,
+  bloom: false,
+  waterWaves: true,
+  treeShadows: true,
+};
+
+const QUALITY_HIGH = {
+  maxPixelRatio: 2,
+  shadowMapSize: 2048,
+  terrainSegments: 256,
+  trees: 820,
+  rocks: 260,
+  grassTufts: 2600,
+  bushes: 180,
+  textureSize: 384,
+  pbrMaps: true,
+  postFx: true,
+  ssao: true,
+  bloom: true,
+  waterWaves: true,
+  treeShadows: true,
+};
+
+const QUALITY_ULTRA = {
+  ...QUALITY_HIGH,
+  maxPixelRatio: 2,
+  shadowMapSize: 2048,
+  terrainSegments: 320,
+  trees: 1100,
+  rocks: 320,
+  grassTufts: 3400,
+  bushes: 240,
+  textureSize: 512,
+};
+
 export const QUALITY = {
-  desktop: {
-    maxPixelRatio: 2,
-    shadowMapSize: 2048,
-    terrainSegments: 256,
-    trees: 820,
-    rocks: 260,
-    grassTufts: 2600,
-  },
-  mobile: {
-    maxPixelRatio: 1.5,
-    shadowMapSize: 1024,
-    terrainSegments: 176,
-    trees: 360,
-    rocks: 130,
-    grassTufts: 900,
-  },
+  low: QUALITY_LOW,
+  medium: QUALITY_MEDIUM,
+  high: QUALITY_HIGH,
+  ultra: QUALITY_ULTRA,
+  /** Back-compat aliases used by tests and `?quality=mobile|desktop`. */
+  mobile: QUALITY_MEDIUM,
+  desktop: QUALITY_HIGH,
 };
 
 export const WORLD = {
@@ -324,14 +378,14 @@ export const BINDINGS = {
   toggleTouch: ['KeyT'],
 };
 
-/** Device capability heuristics. `?quality=mobile|desktop` forces a preset. */
+/** Device capability heuristics. `?quality=low|medium|high|ultra|mobile|desktop` forces a preset. */
 export function detectProfile() {
   if (typeof window === 'undefined') return 'desktop';
   const forced = new URLSearchParams(window.location.search).get('quality');
-  if (forced === 'mobile' || forced === 'desktop') return forced;
+  if (forced && QUALITY[forced]) return forced;
 
   const smallScreen = Math.min(window.innerWidth, window.innerHeight) < 620;
-  return isCoarsePointer() || smallScreen ? 'mobile' : 'desktop';
+  return isCoarsePointer() || smallScreen ? 'medium' : 'high';
 }
 
 export function getQualitySettings(profile = detectProfile()) {
