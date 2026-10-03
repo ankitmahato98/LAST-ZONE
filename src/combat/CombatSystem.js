@@ -29,7 +29,7 @@ import { WeaponView } from './weapons/WeaponView.js';
  *
  * Events: `weapon:equip`, `weapon:fired`, `weapon:dry`, `weapon:reload:start`,
  * `weapon:reload:end`, `combat:hit`, `combat:kill`, `combat:impact`,
- * `combat:player:hurt`, `combat:player:eliminated`, `combat:player:restored`.
+ * `combat:player:hurt`, `combat:player:eliminated`.
  */
 export class CombatSystem {
   constructor({
@@ -103,7 +103,6 @@ export class CombatSystem {
     // --- reactions --------------------------------------------------------
     this._unsubscribe = [
       this.bus.on('player:land', ({ speed }) => this._applyFallDamage(speed)),
-      this.bus.on('player:respawn', () => this._onPlayerRespawn()),
       this.bus.on('debug:damage', ({ amount = this.config.debugDamageAmount } = {}) =>
         this.damagePlayer(amount, { source: 'debug' })),
     ];
@@ -130,7 +129,7 @@ export class CombatSystem {
     this.weapon.on('reload:end', (payload) =>
       this.bus.emit('weapon:reload:end', { ...payload, weapon: payload.weapon.id }));
 
-    const attachTo = this.characterView?.arms?.right?.joint ?? this.characterView?.hips ?? null;
+    const attachTo = this.characterView?.arms?.right?.hand ?? this.characterView?.hips ?? null;
     this.weaponView = new WeaponView(this.weapon, {
       attachTo,
       quality: this.game?.settings?.profile,
@@ -253,6 +252,7 @@ export class CombatSystem {
       reloadProgress: this.weapon.reloadProgress,
       moving: Boolean(controller?.state.moving),
     });
+    this.characterView?.alignWeaponSupport?.();
   }
 
   // -------------------------------------------------------------- shooting --
@@ -394,24 +394,6 @@ export class CombatSystem {
       kills: this.stats.kills,
       position: { ...this.player.position },
     });
-  }
-
-  _onPlayerRespawn() {
-    this.playerHealth.reset();
-    this.eliminated = false;
-    this.weapon.refill();
-    this.effects?.clear();
-    this.cameraSystem?.resetRecoil?.();
-    this.protectionTimer = this.healthConfig.spawnProtection;
-    this.bus.emit('combat:player:restored', {
-      health: this.playerHealth.current,
-      ammo: this.weapon.ammo,
-    });
-  }
-
-  /** Explicit respawn helper (menu button, future match flow). */
-  respawnPlayer() {
-    return this.player.respawn();
   }
 
   dispose() {

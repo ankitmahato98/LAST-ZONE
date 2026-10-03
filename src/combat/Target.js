@@ -228,8 +228,14 @@ export class TrainingDummy {
   setSolid(collider = this.collider, solid = true) {
     if (!collider?.cylinders) return;
     const index = collider.cylinders.indexOf(this.blocker);
-    if (solid && index === -1) collider.cylinders.push(this.blocker);
-    if (!solid && index !== -1) collider.cylinders.splice(index, 1);
+    if (solid && index === -1) {
+      if (collider.addCylinder) collider.addCylinder(this.blocker);
+      else collider.cylinders.push(this.blocker);
+    }
+    if (!solid && index !== -1) {
+      if (collider.removeCylinder) collider.removeCylinder(this.blocker);
+      else collider.cylinders.splice(index, 1);
+    }
   }
 
   dispose() {

@@ -3,8 +3,8 @@
  *
  * A position is only a valid spawn if the ground is walkable, the slope is not
  * a cliff, and nothing solid is standing there. Keeping this behind a tiny
- * interface means the player controller (and later, bots or a network spawn
- * message) never has to know how the world is built.
+ * interface means one-time player entry validation does not depend on the
+ * specific terrain, building or collision implementation.
  *
  * @typedef {object} SpawnBody
  * @property {number} radius
@@ -14,7 +14,7 @@
 export class RayWorldSpawnTester {
   /**
    * Uses the world's analytic height field plus a clearance probe - no actual
-   * raycasting is needed, which keeps spawns instant even during respawn.
+   * raycasting is needed, which keeps the one-time entry probe inexpensive.
    */
   constructor({ world, maxSlope = 0.55 }) {
     this.world = world;

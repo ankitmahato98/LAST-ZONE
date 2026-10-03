@@ -8,8 +8,8 @@ import * as THREE from 'three';
  * the same vector that positions the directional light, so the bright spot in
  * the sky always matches the shadows on the ground.
  *
- * The sun's shadow camera is a moving box that follows the player: a 420m world
- * rendered at 2048px would be far too blurry otherwise.
+ * The sun's shadow camera is a compact moving box that follows the player,
+ * keeping character-scale shadow detail sharp across the island.
  */
 
 const SKY_TEXTURE_WIDTH = 1024;

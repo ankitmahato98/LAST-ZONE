@@ -1,12 +1,6 @@
 import { createElement, removeElement } from '../utils/dom.js';
 
-/**
- * Base heads-up display: brand mark and the adaptive control hints.
- *
- * Health/ammo/reticle live in `ui/CombatHud.js`, which owns the crosshair while
- * combat is active - this system's static crosshair is hidden in that case
- * (`setCrosshairVisible(false)`), so there is exactly one reticle on screen.
- */
+/** Base HUD: location, brand, adaptive control hints and the static fallback reticle. */
 export class HudSystem {
   constructor({ uiRoot }) {
     this.name = 'hud';
@@ -20,8 +14,12 @@ export class HudSystem {
 
     this.hintBody = createElement('div', { className: 'hud__hint-body' });
     this.crosshair = createElement('div', { className: 'hud__crosshair' });
+    this.locationName = createElement('div', { className: 'hud__location-name', text: 'THE WILDS' });
+    this.locationDetail = createElement('div', { className: 'hud__location-detail', text: 'Open terrain' });
+    this.location = createElement('div', { className: 'hud__location' }, [this.locationName, this.locationDetail]);
     this.root = createElement('div', { className: 'hud' }, [
       this.crosshair,
+      this.location,
       createElement('div', { className: 'hud__brand' }, [
         createElement('div', { className: 'hud__logo', html: 'LAST<span>ZONE</span>' }),
       ]),
@@ -30,29 +28,43 @@ export class HudSystem {
     this.uiRoot.appendChild(this.root);
 
     this._setHint(this.input?.controlMode ?? 'keyboard');
-    this._unsubscribe = this.input?.events.on('controlmode', (mode) => this._setHint(mode));
+    this._unsubscribe = [];
+    if (this.input?.events) {
+      this._unsubscribe.push(this.input.events.on('controlmode', (mode) => this._setHint(mode)));
+    }
+    this._unsubscribe.push(game.bus.on('world:poi', ({ poi }) => this._setLocation(poi)));
+
+    const player = game.services.get('player');
+    const world = game.services.get('world');
+    if (player?.position && world) this._setLocation(world.getPoiAt(player.position.x, player.position.z)?.poi ?? null);
+  }
+
+  _setLocation(poi) {
+    this.locationName.textContent = poi?.name?.toUpperCase() ?? 'THE WILDS';
+    this.locationDetail.textContent = poi
+      ? `${poi.landmarkName ?? poi.landmark}  ·  ${poi.density?.toUpperCase() ?? 'SETTLEMENT'}`
+      : 'Open terrain';
   }
 
   _setHint(mode) {
     if (!this.hintBody) return;
-    this.hintBody.innerHTML =
-      mode === 'touch'
-        ? [
-            'Left: move',
-            'Right: look',
-            '<b>Fire</b> / <b>Jump</b> / <b>Aim</b> / <b>Run</b> / <b>Reload</b> buttons',
-          ].join(' &middot; ')
-        : [
-            '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move',
-            '<kbd>Shift</kbd> sprint',
-            '<kbd>Space</kbd> jump',
-            '<kbd>Mouse</kbd> fire (click the view to capture)',
-            '<kbd>RMB</kbd> aim',
-            '<kbd>R</kbd> reload',
-            '<kbd>Wheel</kbd> zoom',
-            '<kbd>F3</kbd> debug',
-            '<kbd>Esc</kbd> menu',
-          ].join(' &middot; ');
+    this.hintBody.innerHTML = mode === 'touch'
+      ? [
+          'Left: move',
+          'Right: look',
+          '<b>Fire</b> / <b>Jump</b> / <b>Aim</b> / <b>Run</b> / <b>Reload</b> buttons',
+        ].join(' &middot; ')
+      : [
+          '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move',
+          '<kbd>Shift</kbd> sprint',
+          '<kbd>Space</kbd> jump',
+          '<kbd>Mouse</kbd> fire (click the view to capture)',
+          '<kbd>RMB</kbd> aim',
+          '<kbd>R</kbd> reload',
+          '<kbd>Wheel</kbd> zoom',
+          '<kbd>F3</kbd> debug',
+          '<kbd>Esc</kbd> menu',
+        ].join(' &middot; ');
   }
 
   /** The combat HUD takes over the reticle once weapons are equipped. */
@@ -65,7 +77,8 @@ export class HudSystem {
   }
 
   dispose() {
-    this._unsubscribe?.();
+    for (const off of this._unsubscribe ?? []) off();
+    this._unsubscribe = [];
     removeElement(this.root);
     this.root = null;
   }

@@ -75,6 +75,5 @@ export const GameEvents = {
   UPDATE: 'game:update', // per frame, { dt, elapsed, alpha }
   FIXED_UPDATE: 'game:fixedUpdate', // per fixed step, { dt, tick }
   RESIZE: 'game:resize', // { width, height, pixelRatio }
-  PLAYER_RESPAWN: 'player:respawn',
   DEBUG_TOGGLE: 'debug:toggle',
 };

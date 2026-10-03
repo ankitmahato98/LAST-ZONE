@@ -40,11 +40,9 @@ export class CombatHud {
       game.bus.on('combat:kill', () => this._onKill()),
       game.bus.on('combat:player:hurt', ({ amount }) => this._onHurt(amount)),
       game.bus.on('combat:player:eliminated', (payload) => this._onEliminated(payload)),
-      game.bus.on('combat:player:restored', () => this._onRestored()),
       game.bus.on('weapon:reload:start', () => this._setReloading(true)),
       game.bus.on('weapon:reload:end', () => this._setReloading(false)),
       game.bus.on('weapon:dry', () => this._pulseReload()),
-      game.bus.on('player:respawn', () => this._hideBanner()),
     ];
 
     this._setReloading(false);
@@ -100,7 +98,7 @@ export class CombatHud {
     this.damageVignette = createElement('div', { className: 'damage-vignette' });
     this.banner = createElement('div', { className: 'banner' }, [
       createElement('div', { className: 'banner__title', text: 'ELIMINATED' }),
-      createElement('div', { className: 'banner__sub', text: 'Press Esc and choose Respawn' }),
+      createElement('div', { className: 'banner__sub', text: 'Eliminated for this run' }),
     ]);
 
     return createElement('div', { className: 'combat-hud' }, [
@@ -187,13 +185,8 @@ export class CombatHud {
   _onEliminated({ kills = 0 } = {}) {
     this.banner.classList.remove('banner--hidden');
     this.banner.querySelector('.banner__sub').textContent =
-      `Kills: ${kills} \u00b7 Press Esc and choose Respawn`;
+      `Kills: ${kills} \u00b7 You are out for this run`;
     this._setClass(this.root, 'combat-hud--dead', true);
-  }
-
-  _onRestored() {
-    this._hideBanner();
-    this.damageFlash = 0.5;
   }
 
   _hideBanner() {

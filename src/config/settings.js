@@ -15,65 +15,72 @@ export const RENDER = {
   fov: 62,
   fovSprintBoost: 7,
   near: 0.15,
-  far: 700,
+  /** Long enough to reveal the island ridgelines; fog handles the far horizon. */
+  far: 3200,
   shadows: true,
   /** Distance (world units) covered by the sun's shadow camera around the player. */
-  shadowRadius: 65,
-  /** Scene fog. Fog colour is also used as the sky horizon colour. */
+  shadowRadius: 68,
+  /** Scene fog fades the 4 km island into the sea/sky horizon. */
   fogColor: 0xa8c4d8,
-  fogNear: 90,
-  fogFar: 340,
+  fogNear: 850,
+  fogFar: 2850,
 };
 
 export const QUALITY = {
   desktop: {
     maxPixelRatio: 2,
     shadowMapSize: 2048,
-    terrainSegments: 176,
-    trees: 90,
-    rocks: 120,
-    grassTufts: 900,
+    terrainSegments: 256,
+    trees: 820,
+    rocks: 260,
+    grassTufts: 2600,
   },
   mobile: {
     maxPixelRatio: 1.5,
     shadowMapSize: 1024,
-    terrainSegments: 112,
-    trees: 45,
-    rocks: 70,
-    grassTufts: 0,
+    terrainSegments: 176,
+    trees: 360,
+    rocks: 130,
+    grassTufts: 900,
   },
 };
 
 export const WORLD = {
-  /** Square world size in metres. The terrain mesh is `size x size`. */
-  size: 420,
+  /** The full square heightfield, in metres; the playable island fills it. */
+  size: 4600,
   seed: 'last-zone-01',
-  /** Soft barrier: the player is pushed back before the mesh edge. */
-  playableRadius: 185,
+  /** Maximum broadphase range; the true boundary follows the irregular coast. */
+  playableRadius: 2480,
 };
 
 export const TERRAIN = {
-  /** Radius around the origin that is kept flat so the arena is walkable. */
-  flatRadius: 26,
-  /** Distance over which the flat area blends into the noise hills. */
-  blendRadius: 62,
-  /** Max height of rolling hills (in metres). */
-  hillAmplitude: 11,
-  /** Base noise feature size. Bigger = wider, gentler hills. */
-  hillScale: 0.0085,
-  /** Ridge of mountains that visually closes the world off at the rim. */
-  rimStart: 150,
-  rimEnd: 215,
-  rimHeight: 46,
-  /** Detail noise added on top of the hills. */
-  detailScale: 0.06,
-  detailAmplitude: 0.35,
+  seaLevel: 0,
+  /** Main radius of a softly squared, irregular 4 km island coastline. */
+  coastRadius: 1880,
+  coastPower: 6,
+  coastVariation: 54,
+  beachWidth: 142,
+  oceanShelfWidth: 190,
+  oceanDepth: 30,
+  beachElevation: 0.55,
+  /** Hills and ridges use deterministic multi-scale noise plus hand-authored ranges. */
+  broadScale: 0.00105,
+  broadAmplitude: 94,
+  hillScale: 0.0032,
+  hillAmplitude: 34,
+  detailScale: 0.014,
+  detailAmplitude: 8,
+  riverHalfWidth: 12,
+  riverBankWidth: 35,
+  riverDepth: 3.2,
+  riverValleyStart: 26,
+  riverValleyWidth: 210,
+  riverValleyFloor: 8,
+  poiBlendWidth: 76,
 };
 
 export const ARENA = {
-  /** Props are scattered outside the flat centre, inside this radius. */
-  scatterRadius: [34, 150],
-  /** Minimum terrain slope (0..1) props avoid - nothing floats on cliffs. */
+  /** Slope limit shared by scenery and the existing training-target placement. */
   maxSlope: 0.42,
 };
 
@@ -134,10 +141,8 @@ export const HEALTH = {
   /** Landing faster than this hurts; damage scales with the excess. */
   fallDamageSpeed: 17,
   fallDamagePerSpeed: 4.2,
-  /** Grace period after respawning in which nothing can hurt you. */
+  /** Brief entry protection on the one initial placement; never reapplied. */
   spawnProtection: 1.2,
-  /** Health a respawn restores (also used by targets). */
-  healOnRespawn: true,
 };
 
 export const COMBAT = {
@@ -216,7 +221,7 @@ export const WEAPONS = {
 };
 
 export const TARGETS = {
-  /** Training dummies scattered around the arena. */
+  /** Combat-test dummies placed around the Central City arrival plaza. */
   count: 8,
   maxHealth: 100,
   radius: 0.45,

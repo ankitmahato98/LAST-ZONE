@@ -59,21 +59,9 @@ export class MenuSystem {
 
     this.startButton = createElement('button', {
       className: 'button',
-      text: 'Deploy',
+      text: 'Enter Island',
       attrs: { type: 'button' },
       on: { click: () => this.close() },
-    });
-
-    const respawnButton = createElement('button', {
-      className: 'button button--ghost',
-      text: 'Respawn',
-      attrs: { type: 'button' },
-      on: {
-        click: () => {
-          this.game?.services.get('player')?.respawn();
-          this.close();
-        },
-      },
     });
 
     this.subtitle = createElement('p', {
@@ -115,15 +103,15 @@ export class MenuSystem {
     const note = createElement('p', {
       className: 'panel__note',
       text:
-        'Combat prototype: one rifle, hitscan hit detection, ammo, reload and training dummies. ' +
-        'Loot, inventory, the shrinking zone and multiplayer plug into the same system pipeline.',
+        'Single-player island foundation: one rifle, hitscan combat and training targets. ' +
+        'Elimination is final for this run; there is no player respawn.',
     });
 
     return createElement('div', { className: 'overlay' }, [
       createElement('div', { className: 'panel' }, [
         createElement('h1', { className: 'panel__title', html: 'LAST<span>ZONE</span>' }),
         this.subtitle,
-        createElement('div', { className: 'panel__actions' }, [this.startButton, respawnButton]),
+        createElement('div', { className: 'panel__actions' }, [this.startButton]),
         controls,
         note,
       ]),
@@ -136,7 +124,7 @@ export class MenuSystem {
     if (this.isOpen) return;
     this.isOpen = true;
     this.overlay.classList.remove('overlay--hidden');
-    this.startButton.textContent = this.hasStarted ? 'Resume' : 'Deploy';
+    this.startButton.textContent = this.hasStarted ? 'Resume' : 'Enter Island';
     this.subtitle.textContent = reason === 'boot' ? 'Single-player battle royale' : 'Paused';
 
     this.input.setEnabled(false);

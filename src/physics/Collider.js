@@ -176,6 +176,7 @@ export class CircleBlocker {
  * geometry?" checks become a coin flip.
  */
 const SKIN = 1e-3;
+let nextColliderId = 0;
 
 const SCRATCH = { pushed: false, nx: 0, nz: 0, push: 0 };
 
@@ -187,11 +188,91 @@ export class Collider {
    * @param {Array<CircleBlocker>} [options.cylinders]
    * @param {number} [options.worldLimit] soft circular world boundary radius
    */
-  constructor({ heightSampler, boxes = [], cylinders = [], worldLimit = Infinity }) {
+  constructor({ heightSampler, boxes = [], cylinders = [], worldLimit = Infinity, cellSize = 48 }) {
     this.heightSampler = heightSampler;
     this.boxes = boxes;
     this.cylinders = cylinders;
     this.worldLimit = worldLimit;
+    this.cellSize = cellSize;
+    this._boxGrid = new Map();
+    this._cylinderGrid = new Map();
+    this._boxCandidates = [];
+    this._cylinderCandidates = [];
+    this._querySerial = 0;
+    this._queryBase = ++nextColliderId * 1_000_000_000;
+
+    for (const box of this.boxes) this._indexBox(box);
+    for (const cylinder of this.cylinders) this._indexCylinder(cylinder);
+  }
+
+  /** Runtime targets can join/leave the static broadphase without a full rebuild. */
+  addCylinder(cylinder) {
+    if (this.cylinders.includes(cylinder)) return cylinder;
+    this.cylinders.push(cylinder);
+    this._indexCylinder(cylinder);
+    return cylinder;
+  }
+
+  removeCylinder(cylinder) {
+    const index = this.cylinders.indexOf(cylinder);
+    if (index < 0) return false;
+    this.cylinders.splice(index, 1);
+    cylinder._colliderActive = false;
+    return true;
+  }
+
+  _indexBox(box) {
+    box._colliderActive = true;
+    const extentX = Math.abs(box.cos) * box.half.x + Math.abs(box.sin) * box.half.z;
+    const extentZ = Math.abs(box.sin) * box.half.x + Math.abs(box.cos) * box.half.z;
+    this._insert(this._boxGrid, box,
+      box.center.x - extentX, box.center.x + extentX,
+      box.center.z - extentZ, box.center.z + extentZ);
+  }
+
+  _indexCylinder(cylinder) {
+    cylinder._colliderActive = true;
+    this._insert(this._cylinderGrid, cylinder,
+      cylinder.x - cylinder.radius, cylinder.x + cylinder.radius,
+      cylinder.z - cylinder.radius, cylinder.z + cylinder.radius);
+  }
+
+  _insert(grid, blocker, minX, maxX, minZ, maxZ) {
+    const size = this.cellSize;
+    const minCellX = Math.floor(minX / size);
+    const maxCellX = Math.floor(maxX / size);
+    const minCellZ = Math.floor(minZ / size);
+    const maxCellZ = Math.floor(maxZ / size);
+    for (let x = minCellX; x <= maxCellX; x += 1) {
+      for (let z = minCellZ; z <= maxCellZ; z += 1) {
+        const key = `${x},${z}`;
+        let cell = grid.get(key);
+        if (!cell) grid.set(key, (cell = []));
+        cell.push(blocker);
+      }
+    }
+  }
+
+  _nearby(grid, x, z, radius, output) {
+    output.length = 0;
+    const serial = this._queryBase + ++this._querySerial;
+    const size = this.cellSize;
+    const minCellX = Math.floor((x - radius) / size);
+    const maxCellX = Math.floor((x + radius) / size);
+    const minCellZ = Math.floor((z - radius) / size);
+    const maxCellZ = Math.floor((z + radius) / size);
+    for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
+      for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ += 1) {
+        const cell = grid.get(`${cellX},${cellZ}`);
+        if (!cell) continue;
+        for (const blocker of cell) {
+          if (!blocker._colliderActive || blocker._gridStamp === serial) continue;
+          blocker._gridStamp = serial;
+          output.push(blocker);
+        }
+      }
+    }
+    return output;
   }
 
   heightAt(x, z) {
@@ -212,9 +293,10 @@ export class Collider {
    */
   groundHeightAt(x, z, feetY, body) {
     let ground = this.heightAt(x, z);
-    const reach = feetY + body.stepHeight + 0.001;
+    const reach = feetY + (body.stepHeight ?? 0) + 0.001;
+    const boxes = this._nearby(this._boxGrid, x, z, body.radius + 0.5, this._boxCandidates);
 
-    for (const box of this.boxes) {
+    for (const box of boxes) {
       if (!box.walkable) continue;
       if (box.topY > reach) continue;
       if (box.overlapsFootprint(x, z, body.radius * 0.85)) {
@@ -230,15 +312,17 @@ export class Collider {
     for (let pass = 0; pass < passes; pass += 1) {
       let moved = false;
       const headY = position.y + body.height;
+      const boxes = this._nearby(this._boxGrid, position.x, position.z, body.radius + 0.5, this._boxCandidates);
 
-      for (const box of this.boxes) {
+      for (const box of boxes) {
         // Floors are handled by the vertical solver.
         if (box.walkable && position.y >= box.topY - body.stepHeight) continue;
         if (headY <= box.bottomY || position.y >= box.topY) continue;
         if (box.pushOut(position, body.radius, SCRATCH)) moved = true;
       }
 
-      for (const cylinder of this.cylinders) {
+      const cylinders = this._nearby(this._cylinderGrid, position.x, position.z, body.radius + 0.5, this._cylinderCandidates);
+      for (const cylinder of cylinders) {
         if (headY <= cylinder.bottomY || position.y >= cylinder.topY) continue;
         if (cylinder.pushOut(position, body.radius, SCRATCH)) moved = true;
       }
@@ -255,10 +339,12 @@ export class Collider {
     if (Math.abs(ground - y) > 0.6) return false;
 
     const probe = { x, y, z };
-    for (const box of this.boxes) {
+    const boxes = this._nearby(this._boxGrid, x, z, body.radius + 0.5, this._boxCandidates);
+    for (const box of boxes) {
       if (positionInsideBox(probe, body, box)) return false;
     }
-    for (const cylinder of this.cylinders) {
+    const cylinders = this._nearby(this._cylinderGrid, x, z, body.radius + 0.5, this._cylinderCandidates);
+    for (const cylinder of cylinders) {
       if (probe.y + body.height <= cylinder.bottomY) continue;
       if (probe.y >= cylinder.topY) continue;
       if (cylinder.overlapsFootprint(x, z, body.radius)) return false;
@@ -272,12 +358,14 @@ export class Collider {
   pointBlocked(x, y, z, padding = 0.3) {
     if (this.heightAt(x, z) + padding > y) return true;
 
-    for (const box of this.boxes) {
+    const boxes = this._nearby(this._boxGrid, x, z, padding, this._boxCandidates);
+    for (const box of boxes) {
       if (y > box.topY + padding || y < box.bottomY - padding) continue;
       if (box.overlapsFootprint(x, z, padding)) return true;
     }
 
-    for (const cylinder of this.cylinders) {
+    const cylinders = this._nearby(this._cylinderGrid, x, z, padding, this._cylinderCandidates);
+    for (const cylinder of cylinders) {
       if (y > cylinder.topY + padding || y < cylinder.bottomY - padding) continue;
       if (cylinder.overlapsFootprint(x, z, padding)) return true;
     }

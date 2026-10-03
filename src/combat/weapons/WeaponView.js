@@ -17,13 +17,16 @@ import { createWeaponModel } from './WeaponModels.js';
  * everything above it talks in numbers, not bones.
  */
 const HIP_POSE = {
-  position: new THREE.Vector3(0.16, -0.24, 0.16),
-  rotation: new THREE.Euler(0.12, 0.28, 0.95),
+  // The rifle sits in the right palm, carried low across the body.
+  position: new THREE.Vector3(0.015, -0.025, 0.055),
+  rotation: new THREE.Euler(-0.54, 0.02, 0.11),
 };
 
 const AIM_POSE = {
-  position: new THREE.Vector3(0.045, 0.02, -0.16),
-  rotation: new THREE.Euler(0, 0, 0.06),
+  // The right wrist is counter-rotated by the character rig, leaving the bore
+  // level and parallel with the camera's forward axis while aiming.
+  position: new THREE.Vector3(-0.1, 0.025, 0.2),
+  rotation: new THREE.Euler(0, 0, 0),
 };
 
 export class WeaponView {

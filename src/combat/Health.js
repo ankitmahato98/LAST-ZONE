@@ -69,7 +69,7 @@ export class Health extends Emitter {
     return healed;
   }
 
-  /** Full reset - respawn, round restart, target rebuild. */
+  /** Full reset for its owner (currently used by the target-dummy rebuild). */
   reset(value = this.max) {
     this.current = clamp(value, 0, this.max);
     this.dead = this.current === 0;

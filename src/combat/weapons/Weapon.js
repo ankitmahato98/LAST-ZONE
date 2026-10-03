@@ -168,7 +168,7 @@ export class Weapon extends Emitter {
     return true;
   }
 
-  /** Top the weapon back up - respawn, or a future ammo pickup. */
+  /** Top the weapon back up for an explicit local reset or future ammo pickup. */
   refill({ reserve = true } = {}) {
     this.magazine = this.magazineSize;
     if (reserve) this.reserve = this.type.reserveAmmo ?? this.reserve;

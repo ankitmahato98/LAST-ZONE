@@ -50,20 +50,30 @@ test('LAST ZONE boots and runs', async (t) => {
     // until the player presses Deploy (checked in the next subtest).
     assert.equal(game.status, 'paused');
     assert.ok(world.collider instanceof Collider);
-    assert.ok(world.stats.boxes > 10, `expected arena colliders, got ${world.stats.boxes}`);
-    assert.ok(world.stats.cylinders > 5, `expected prop colliders, got ${world.stats.cylinders}`);
-    assert.ok(world.stats.props.trees > 0);
+    assert.ok(world.stats.boxes > 250, `expected island structure colliders, got ${world.stats.boxes}`);
+    assert.ok(world.stats.cylinders > 100, `expected foliage/landmark colliders, got ${world.stats.cylinders}`);
+    assert.ok(world.stats.props.trees > 50);
+    assert.equal(world.stats.pois, 10);
+    assert.ok(world.stats.buildings >= 65);
+    assert.equal(world.stats.landmarks, 10);
+    assert.ok(world.stats.roads >= 7);
+    assert.ok(world.stats.validatedDropCandidates > 0);
+    assert.ok(world.futureLootLocations.every((anchor) => anchor.metadataOnly && !anchor.enabled));
 
-    // The scene really contains the terrain mesh and instanced props.
+    // The scene really contains the island, coastline water, settlements and instanced props.
     assert.ok(renderer.worldGroup.children.length > 0, 'world group is populated');
     const terrain = renderer.worldGroup.getObjectByName('terrain');
     assert.ok(terrain, 'terrain mesh exists');
     assert.ok(terrain.geometry.attributes.position.count > 1000, 'terrain has geometry');
     assert.ok(terrain.geometry.attributes.color, 'terrain is vertex coloured');
+    assert.ok(renderer.worldGroup.getObjectByName('surrounding-ocean'), 'coastline meets the visible ocean');
+    assert.ok(renderer.worldGroup.getObjectByName('willow-run-river'), 'the carved river is visible');
+    assert.ok(renderer.worldGroup.getObjectByName('road-island-spine-west'), 'road network is connected into the scene');
     assert.ok(renderer.actorsGroup.children.length > 0, 'the avatar is in the scene');
 
     assert.ok(hud.root, 'HUD was mounted');
     assert.ok(document.querySelector('.hud__crosshair'), 'crosshair exists');
+    assert.ok(document.querySelector('.hud__location'), 'named POI readout exists');
 
     const state = player().state;
     assert.ok(Number.isFinite(state.position.y));
@@ -73,7 +83,7 @@ test('LAST ZONE boots and runs', async (t) => {
     );
   });
 
-  await t.test('starts paused behind the menu, and Deploy starts the match', () => {
+  await t.test('starts paused behind the menu, and Enter Island starts the run', () => {
     const menu = services().get('menu');
     const input = services().get('input');
 
@@ -128,7 +138,7 @@ test('LAST ZONE boots and runs', async (t) => {
     const pawn = player();
     const position = pawn.state.position.clone();
 
-    // Walk in the open arena, then sprint, and compare the reached speeds.
+    // Walk through the open arrival district, then sprint, and compare speeds.
     key(window, 'keydown', 'KeyW');
     advance(game, 0.8);
     const walkSpeed = pawn.state.speed;
@@ -180,7 +190,7 @@ test('LAST ZONE boots and runs', async (t) => {
     const world = services().get('world');
     const body = player().body;
 
-    // Run into the arena wall for a while, then check we are still legal.
+    // Run into the island boundary for a while, then check we remain on land.
     key(window, 'keydown', 'KeyW');
     advance(game, 3);
     key(window, 'keyup', 'KeyW');
@@ -287,15 +297,26 @@ test('LAST ZONE boots and runs', async (t) => {
     assert.ok(!player().state.position.equals(position), 'resumed');
   });
 
-  await t.test('a respawn places the player on legal ground', () => {
+  await t.test('the player enters once on validated terrain and has no respawn path', () => {
     const world = services().get('world');
-    services().get('player').respawn();
-    advance(game, 0.5);
+    const pawn = services().get('player');
+    assert.equal(pawn.spawned, true);
+    assert.equal(typeof pawn.respawn, 'undefined');
+    assert.equal(typeof services().get('combat').respawnPlayer, 'undefined');
 
-    const { position } = player().state;
-    assert.ok(world.isWithinBounds(position.x, position.z, 0));
-    assert.ok(world.collider.isClear(position.x, position.z, position.y, player().body));
-    assert.ok(Math.abs(position.y - world.heightAt(position.x, position.z)) < 0.01);
+    const spawn = pawn.spawnPoint;
+    assert.ok(world.isWithinBounds(spawn.x, spawn.z, pawn.body.radius));
+    assert.ok(world.collider.isClear(spawn.x, spawn.z, spawn.y, pawn.body));
+    assert.ok(Math.abs(spawn.y - world.heightAt(spawn.x, spawn.z)) < 0.01);
+    assert.equal(world.dropRegions.length, 10, 'distributed future drop regions are prepared');
+    assert.ok(world.dropRegions.every((region) => region.validated && region.candidates.length > 0));
+    for (const region of world.dropRegions) {
+      for (const candidate of region.candidates) {
+        assert.ok(world.isWithinBounds(candidate.x, candidate.z, pawn.body.radius));
+        assert.ok(world.slopeAt(candidate.x, candidate.z) <= 0.48);
+        assert.ok(world.collider.isClear(candidate.x, candidate.z, candidate.y, pawn.body));
+      }
+    }
   });
 
   game.dispose();

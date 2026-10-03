@@ -238,6 +238,45 @@ body[data-touch='true'] .hud__brand {
   color: var(--lz-accent);
 }
 
+.hud__location {
+  position: absolute;
+  top: calc(10px + var(--lz-safe-top));
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 150px;
+  max-width: min(52vw, 340px);
+  padding: 7px 14px 6px;
+  border: 1px solid rgba(198, 226, 226, 0.2);
+  border-radius: 7px;
+  background: rgba(10, 20, 24, 0.62);
+  text-align: center;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.14);
+  backdrop-filter: blur(5px);
+}
+
+.hud__location-name {
+  overflow: hidden;
+  color: var(--lz-text);
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.19em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud__location-detail {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--lz-accent);
+  font-family: var(--lz-mono);
+  font-size: 0.52rem;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---------------------------------------------------------- overlays ---- */
 
 .overlay {
