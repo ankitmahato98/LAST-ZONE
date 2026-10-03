@@ -25,7 +25,10 @@ export class WorldSystem {
     this._spawnIndex = -1;
     this._currentPoiId = null;
     this.dropRegions = [];
+    /** Metadata-only anchors reserved for a future match-start design. */
     this.futureLootLocations = [];
+    /** Real, physical loot anchors produced by the island builders. */
+    this.lootAnchors = [];
   }
 
   async init(game) {
@@ -61,12 +64,18 @@ export class WorldSystem {
     });
     this.dropRegions = this._buildDropRegions();
     this.futureLootLocations = this._buildFutureLootMetadata();
+    // Loot anchors come straight from the builders (building interiors, supply
+    // crates, landmarks, settlement outskirts). The loot system validates them
+    // against the collider before anything is spawned, so this list stays the
+    // authored intent rather than a guarantee.
+    this.lootAnchors = this.islandMap?.lootAnchors ?? [];
 
     game.bus.emit('world:ready', this.stats);
     game.bus.emit('world:catalog', {
       pois: this.poiCatalog,
       dropRegions: this.dropRegions,
       futureLootLocations: this.futureLootLocations,
+      lootAnchors: this.lootAnchors.length,
     });
   }
 
@@ -85,6 +94,8 @@ export class WorldSystem {
       roads: this.islandMap?.group.children.filter((child) => child.name.startsWith('road-')).length ?? 0,
       validatedDropCandidates: this.dropRegions.reduce((total, region) => total + region.candidates.length, 0),
       futureLootAnchors: this.futureLootLocations.length,
+      lootAnchors: this.lootAnchors.length,
+      indoorLootAnchors: this.lootAnchors.filter((anchor) => anchor.indoor).length,
     };
   }
 
@@ -259,6 +270,7 @@ export class WorldSystem {
   }
 
   dispose() {
+    this.lootAnchors.length = 0;
     this.terrain.dispose();
     this.arena.dispose();
     this.islandMap?.dispose();

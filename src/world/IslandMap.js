@@ -9,6 +9,24 @@ import {
   ROAD_NETWORK,
 } from './MapData.js';
 
+/**
+ * Which loot table an enterable building's interior anchors draw from.
+ * The world builder only names the *kind* of place; `loot/LootTables.js` owns
+ * what can actually be found there.
+ */
+const BUILDING_LOOT_KIND = {
+  urban: 'store',
+  industrial: 'warehouse',
+  military: 'military',
+  harbor: 'dock',
+  riverside: 'house',
+  hilltop: 'house',
+  forest: 'camp',
+  power: 'utility',
+  quarry: 'industrial',
+  farm: 'farm',
+};
+
 const THEMES = {
   urban: { count: 12, wall: 'brickWarm', roof: 'roofSlate', trim: 'concreteDark', window: 'windowGlass', radius: 158, landmark: 'tower', landmarkOffset: [0, -42] },
   industrial: { count: 8, wall: 'metalPainted', roof: 'roofMetal', trim: 'metal', window: 'windowGlass', radius: 140, landmark: 'chimney', landmarkOffset: [20, 0] },
@@ -40,6 +58,12 @@ export class IslandMap {
     this.buildingCount = 0;
     this.coverCount = 0;
     this.landmarkCount = 0;
+    /**
+     * World-space loot anchors: `{ id, kind, poiId, poiName, indoor, position, yaw }`.
+     * The loot system validates and rolls them - this class only says *where*.
+     * @type {Array<object>}
+     */
+    this.lootAnchors = [];
     this.poiCatalog = POI_DEFINITIONS.map((poi) => ({
       ...poi,
       center: { x: poi.center[0], z: poi.center[1] },
@@ -124,6 +148,7 @@ export class IslandMap {
           index: i,
         });
         buildingAnchors.push({ x, z, yaw, width, depth });
+        this._buildBuildingLootAnchors({ poi, theme, index: i, center: { x, z }, groundY, width, depth, yaw });
         catalog.structureCount += 1;
       }
 
@@ -131,6 +156,7 @@ export class IslandMap {
       this._buildPOIWalkways(poi, buildingAnchors);
       this._buildCover(poi, random);
       this._buildLandmark(poi, theme);
+      this._buildOutdoorLootAnchors(poi, random);
     }
   }
 
@@ -227,6 +253,58 @@ export class IslandMap {
     });
   }
 
+  /**
+   * One or two loot anchors *inside* every enterable building.
+   *
+   * The interior is the interesting place to loot (and the reason buildings are
+   * enterable at all), so each one gets at least one spot: near the middle for
+   * small houses, plus a second spot along a side wall for larger footprints.
+   * `LootSystem` rejects anything a player could not actually reach.
+   */
+  _buildBuildingLootAnchors({ poi, theme, index, center, groundY, width, depth, yaw }) {
+    const kind = BUILDING_LOOT_KIND[poi.theme] ?? 'house';
+    const spots = [{ lx: 0.06, lz: depth * 0.2 }];
+    if (width * depth > 130) spots.push({ lx: width * 0.26, lz: -depth * 0.2 });
+
+    for (let i = 0; i < spots.length; i += 1) {
+      const local = spots[i];
+      const world = localToWorld(center, yaw, local.lx, local.lz);
+      this.lootAnchors.push({
+        id: `${poi.id}-building-${index}-loot-${i}`,
+        kind,
+        poiId: poi.id,
+        poiName: poi.name,
+        indoor: true,
+        position: { x: world.x, y: groundY, z: world.z },
+        yaw,
+      });
+    }
+  }
+
+  /** Outdoor loot: a medical spot and a footpath stash per settlement. */
+  _buildOutdoorLootAnchors(poi, random) {
+    const outdoor = [
+      { kind: poi.theme === 'urban' || poi.theme === 'riverside' ? 'medical' : 'crate', band: 0.34, suffix: 'medical' },
+      { kind: 'roadside', band: 0.82, suffix: 'roadside' },
+    ];
+    for (const spot of outdoor) {
+      const angle = random.range(0, Math.PI * 2);
+      const radius = poi.radius * spot.band;
+      const x = poi.center[0] + Math.cos(angle) * radius;
+      const z = poi.center[1] + Math.sin(angle) * radius;
+      if (!this.terrain.isLandAt(x, z, 6)) continue;
+      this.lootAnchors.push({
+        id: `${poi.id}-outdoor-${spot.suffix}`,
+        kind: spot.kind,
+        poiId: poi.id,
+        poiName: poi.name,
+        indoor: false,
+        position: { x, y: this.terrain.heightAt(x, z), z },
+        yaw: angle + Math.PI,
+      });
+    }
+  }
+
   _buildPOIWalkways(poi, buildings) {
     if (buildings.length < 4) return;
     const center = { x: poi.center[0], z: poi.center[1] };
@@ -268,6 +346,18 @@ export class IslandMap {
           walkable: true,
           name: `${poi.id}-supply-crate-${i}`,
         });
+        // Every supply crate is also a lootable spot: step to its side so the
+        // pickup is not buried inside the crate collider.
+        const side = localToWorld({ x, z }, yaw, 0, 2.1);
+        this.lootAnchors.push({
+          id: `${poi.id}-crate-${i}-loot`,
+          kind: 'crate',
+          poiId: poi.id,
+          poiName: poi.name,
+          indoor: false,
+          position: { x: side.x, y: groundY, z: side.z },
+          yaw: yaw + Math.PI,
+        });
       } else if (i % 3 === 1) {
         this._addBox({
           center: { x, y: groundY + 0.72, z },
@@ -287,6 +377,20 @@ export class IslandMap {
 
   _buildLandmark(poi, theme) {
     const style = theme.landmark;
+    // A stash at the landmark base: landmarks are the natural "high value" spots.
+    this.lootAnchors.push({
+      id: `${poi.id}-landmark-loot`,
+      kind: 'landmark',
+      poiId: poi.id,
+      poiName: poi.name,
+      indoor: false,
+      position: {
+        x: poi.center[0] + theme.landmarkOffset[0] + 7,
+        y: this.terrain.heightAt(poi.center[0] + theme.landmarkOffset[0] + 7, poi.center[1] + theme.landmarkOffset[1]),
+        z: poi.center[1] + theme.landmarkOffset[1],
+      },
+      yaw: 0,
+    });
     const x = poi.center[0] + theme.landmarkOffset[0];
     const z = poi.center[1] + theme.landmarkOffset[1];
     const groundY = this.terrain.heightAt(x, z);
@@ -579,6 +683,7 @@ export class IslandMap {
     this.boxes.length = 0;
     this.cylinders.length = 0;
     this.poiCatalog.length = 0;
+    this.lootAnchors.length = 0;
     this.batches.clear();
   }
 }

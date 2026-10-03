@@ -1,6 +1,6 @@
 {
   "name": "last-zone",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "LAST ZONE - a single-player 3D battle royale built with Three.js. Combat prototype, shipped as a web game and as a signed Android APK.",

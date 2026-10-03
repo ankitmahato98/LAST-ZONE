@@ -56,6 +56,34 @@ function holdFire(seconds) {
   S('input').release('test:fire', 'primary');
 }
 
+/**
+ * Phase B: the player starts unarmed and every weapon is a world pickup.
+ * Walk onto the guaranteed arrival-plaza crate and press E - the exact desktop
+ * interaction path a player uses.
+ */
+function armPlayer({ ammo = 0 } = {}) {
+  const loot = S('loot');
+  const stash = loot.pickups.find((pickup) => pickup.active && pickup.kind === 'weapon');
+  assert.ok(stash, 'the arrival plaza has a guaranteed weapon pickup');
+  player.teleport(stash.position.x, stash.position.z);
+  advance(game, 3 / 60);
+  assert.ok(S('inventory').prompt, 'standing next to the crate shows the pickup prompt');
+
+  key(window, 'keydown', 'KeyE');
+  advance(game, 2 / 60);
+  key(window, 'keyup', 'KeyE');
+  advance(game, 2 / 60);
+
+  assert.ok(combat.weapon, 'the weapon pickup armed the player');
+  assert.equal(combat.isArmed, true);
+  advance(game, 0.3); // let the carry pose settle
+  if (ammo > 0) {
+    S('inventory').inventory.addAmmo(combat.weapon.ammoType, ammo);
+    advance(game, 2 / 60);
+  }
+  return combat.weapon;
+}
+
 test('combat boots with a weapon, health and a dummy range', async (t) => {
   const { createGame } = await import('../src/core/engine.js');
   window = globalThis.window;
@@ -78,29 +106,31 @@ test('combat boots with a weapon, health and a dummy range', async (t) => {
   camera = S('camera3p');
   hud = S('combatHud');
 
-  await t.test('the combat services are wired and the player is armed', () => {
+  await t.test('the combat services are wired and the player starts unarmed', () => {
     assert.ok(combat, 'combat service');
     assert.ok(targets, 'target system');
     assert.ok(S('combatEffects'), 'effects');
     assert.ok(hud, 'combat HUD');
+    assert.ok(S('loot'), 'loot system');
+    assert.ok(S('inventory'), 'inventory system');
+    assert.ok(S('vitals'), 'vitals service');
 
-    assert.equal(combat.weapon.type.id, 'rifle');
-    assert.equal(combat.ammo.magazine, combat.weapon.type.magazineSize);
+    // Locked Phase B values.
+    assert.equal(combat.maxHealth, 200, 'max HP is 200');
+    assert.equal(S('vitals').maxEnergy, 300, 'max EP is 300');
+
+    // Empty hands until a weapon is found in the world.
+    assert.equal(combat.weapon, null);
+    assert.equal(combat.isArmed, false);
     assert.equal(combat.health, combat.maxHealth);
     assert.equal(combat.isEliminated, false);
     assert.equal(combat.isProtected, true, 'spawn protection is active at boot');
 
-    // The weapon model is attached to the character's right hand.
-    const view = S('characterView');
-    const mount = view.arms.right.joint.getObjectByName('weapon-mount');
-    assert.ok(mount, 'weapon is mounted on the hand');
-    assert.ok(mount.getObjectByName('muzzle'), 'and exposes a muzzle');
-
-    // The muzzle sits in front of the character, near chest height.
-    const muzzle = combat.weaponView.getWorldMuzzle();
-    const toPlayer = Math.hypot(muzzle.x - player.position.x, muzzle.z - player.position.z);
-    assert.ok(toPlayer > 0.1 && toPlayer < 1.2, `muzzle ${toPlayer.toFixed(2)}m from the player`);
-    assert.ok(muzzle.y > player.position.y + 0.8, 'held at chest height');
+    // The world actually contains loot: real pickups, not stubs.
+    const loot = S('loot');
+    assert.ok(loot.pickups.length > 80, `expected a looted island, got ${loot.pickups.length}`);
+    assert.ok(loot.anchors.some((anchor) => anchor.indoor), 'buildings hold loot');
+    assert.ok(loot.stats.instancedMeshes < 40, 'loot renders through a handful of instanced meshes');
   });
 
   await t.test('the dummy range is placed on walkable ground', () => {
@@ -129,14 +159,22 @@ test('combat boots with a weapon, health and a dummy range', async (t) => {
     assert.equal(targets.aliveCount, 8);
   });
 
-  await t.test('the combat HUD shows the reticle, health and ammo', () => {
+  await t.test('the HUD shows the reticle and the locked HP/EP values', () => {
     assert.ok(document.querySelector('.reticle'), 'dynamic reticle exists');
     assert.equal(document.querySelector('.hud__crosshair').style.display, 'none', 'the static crosshair is hidden');
 
+    const inventoryHud = S('inventoryHud');
+    inventoryHud.update(1 / 60);
+    assert.ok(document.querySelector('.vitals'), 'vitals block exists');
+    assert.equal(document.querySelector('.vitals__value').textContent, '200 / 200', 'HP reads current / 200');
+    assert.ok(
+      document.querySelector('.vitals__value--ep').textContent.endsWith('/ 300'),
+      'EP reads current / 300',
+    );
+
     hud.update(1 / 60);
-    assert.equal(document.querySelector('.vitals__value').textContent, '100');
-    assert.equal(document.querySelector('.ammo__mag').textContent, '30');
-    assert.equal(document.querySelector('.ammo__reserve').textContent, '/ 210');
+    assert.equal(document.querySelector('.ammo__name').textContent, 'UNARMED', 'no weapon yet');
+    assert.equal(document.querySelector('.ammo__mag').textContent, '0');
     assert.equal(document.querySelector('.ammo__kills').textContent, 'KILLS 0');
   });
 
@@ -145,6 +183,27 @@ test('combat boots with a weapon, health and a dummy range', async (t) => {
     document.querySelector('#ui-root .button').click();
     assert.equal(game.status, 'running');
     advance(game, 0.1);
+  });
+
+  await t.test('a weapon crate arms the player through the real pickup flow (E)', () => {
+    const weapon = armPlayer({ ammo: 240 });
+
+    assert.equal(weapon.type.id, 'rifle', 'the crate holds the AR-4 Ranger');
+    assert.equal(combat.ammo.magazine, weapon.type.magazineSize);
+    assert.ok(S('inventory').inventory.ammoCount('556') >= 240, 'ammo went into the shared pool');
+
+    // The weapon model is attached to the character's right hand.
+    const view = S('characterView');
+    const mount = view.arms.right.joint.getObjectByName('weapon-mount');
+    assert.ok(mount, 'weapon is mounted on the hand');
+    assert.ok(mount.getObjectByName('muzzle'), 'and exposes a muzzle');
+
+    // The muzzle sits in front of the character, in the right hand (the hip
+    // carry pose holds the rifle low, so this checks front-of-body + off-ground).
+    const muzzle = combat.weaponView.getWorldMuzzle();
+    const toPlayer = Math.hypot(muzzle.x - player.position.x, muzzle.z - player.position.z);
+    assert.ok(toPlayer > 0.1 && toPlayer < 1.4, `muzzle ${toPlayer.toFixed(2)}m from the player`);
+    assert.ok(muzzle.y > player.position.y + 0.1, 'held off the ground');
   });
 
   await t.test('initial spawn protection is granted once and expires normally', () => {
@@ -511,6 +570,7 @@ test('combat boots with a weapon, health and a dummy range', async (t) => {
       model: 'rifle',
     });
 
+    const lootedRifle = combat.weapon;
     combat.equipWeapon('e2e-smg');
     advance(game, 0.2);
 
@@ -526,9 +586,11 @@ test('combat boots with a weapon, health and a dummy range', async (t) => {
     combatHudRefresh();
     assert.equal(document.querySelector('.ammo__mag').textContent, String(combat.ammo.magazine));
 
-    // Put the rifle back for the remaining assertions.
-    combat.equipWeapon('rifle');
+    // Put the looted rifle back through the instance path (what the inventory
+    // does on a weapon swap) and make sure its magazine state survived.
+    combat.equipWeapon(lootedRifle);
     advance(game, 0.1);
+    assert.equal(combat.weapon, lootedRifle);
     assert.equal(combat.weapon.type.id, 'rifle');
   });
 

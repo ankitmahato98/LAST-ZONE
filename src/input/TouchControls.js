@@ -8,6 +8,10 @@ import { GameEvents } from '../core/events.js';
  *  - right half: drag to look
  *  - buttons: fire (hold for automatic), jump (hold), aim (tap to toggle),
  *    sprint (tap to toggle) and reload (tap)
+ *  - loot cluster: a contextual pickup/swap button that appears only when
+ *    something is in reach, swap/drop weapon, and one quick-use button per
+ *    consumable stack (labelled with the item and its remaining count)
+ *  - a convert button appears while EP can be turned into HP
  *  - top right: pause
  *
  * Every button writes the same `InputActions` the keyboard does, so the combat
@@ -36,6 +40,8 @@ export class TouchControls {
     this.aiming = false;
     this.visible = false;
     this.paused = false;
+    /** Contextual loot prompt currently shown (null when nothing is near). */
+    this.prompt = null;
 
     this._stickPointerId = null;
     this._lookPointerId = null;
@@ -87,16 +93,54 @@ export class TouchControls {
       attrs: { type: 'button', 'aria-label': 'Reload weapon' },
     });
 
+    // --- loot cluster -----------------------------------------------------
+    this.interactButton = createElement('button', {
+      className: 'touch__button touch__button--context touch--hidden',
+      text: 'Pick up',
+      attrs: { type: 'button', 'aria-label': 'Pick up loot' },
+    });
+    this.swapButton = createElement('button', {
+      className: 'touch__button touch__button--small',
+      text: 'Swap',
+      attrs: { type: 'button', 'aria-label': 'Swap weapon' },
+    });
+    this.dropButton = createElement('button', {
+      className: 'touch__button touch__button--small',
+      text: 'Drop',
+      attrs: { type: 'button', 'aria-label': 'Drop weapon' },
+    });
+    this.convertButton = createElement('button', {
+      className: 'touch__button touch__button--small touch__button--convert touch--hidden',
+      text: 'EP→HP',
+      attrs: { type: 'button', 'aria-label': 'Convert EP into HP' },
+    });
+    this.itemButtons = [];
+    for (let i = 0; i < 2; i += 1) {
+      const button = createElement('button', {
+        className: 'touch__button touch__button--small touch__button--item touch--hidden',
+        text: `Item ${i + 1}`,
+        attrs: { type: 'button', 'aria-label': `Use consumable ${i + 1}` },
+      });
+      this.itemButtons.push(button);
+    }
+
+    const lootRow = createElement('div', { className: 'touch__row' }, [
+      ...this.itemButtons,
+      this.convertButton,
+      this.swapButton,
+      this.dropButton,
+    ]);
     const upperRow = createElement('div', { className: 'touch__row' }, [
       this.reloadButton,
       this.aimButton,
       this.sprintButton,
     ]);
     const lowerRow = createElement('div', { className: 'touch__row' }, [
+      this.interactButton,
       this.jumpButton,
       this.fireButton,
     ]);
-    const buttons = createElement('div', { className: 'touch__buttons' }, [upperRow, lowerRow]);
+    const buttons = createElement('div', { className: 'touch__buttons' }, [lootRow, upperRow, lowerRow]);
 
     this.menuButton = createElement('button', {
       className: 'touch__menu',
@@ -136,6 +180,14 @@ export class TouchControls {
     // Holding fire repeats (automatic weapons); tapping fires a single shot.
     this._bindHoldButton(this.fireButton, InputActions.PRIMARY);
     this._bindTapButton(this.reloadButton, InputActions.RELOAD);
+    // Loot actions: one tap each, exactly like their keyboard counterparts.
+    this._bindTapButton(this.interactButton, InputActions.INTERACT);
+    this._bindTapButton(this.swapButton, InputActions.SWAP_WEAPON);
+    this._bindTapButton(this.dropButton, InputActions.DROP_WEAPON);
+    this._bindTapButton(this.convertButton, InputActions.CONVERT);
+    this.itemButtons.forEach((button, index) => {
+      this._bindTapButton(button, InputActions[`USE_ITEM_${index + 1}`]);
+    });
     this.sprintButton.addEventListener('pointerdown', (e) => this._onToggle(e, 'sprinting', this.sprintButton, InputActions.SPRINT));
     this.aimButton.addEventListener('pointerdown', (e) => this._onToggle(e, 'aiming', this.aimButton, InputActions.AIM));
     this.menuButton.addEventListener('click', () => this.game.services.get('menu')?.togglePause());
@@ -145,6 +197,13 @@ export class TouchControls {
     this.input.onActionDown(({ action }) => {
       if (action === InputActions.TOGGLE_TOUCH) this.setVisible(!this.visible, { userForced: true });
     });
+
+    this._unsubscribe = [
+      game.bus.on('loot:prompt', ({ prompt }) => this._syncPrompt(prompt)),
+      game.bus.on('inventory:changed', () => this._syncLoadout()),
+      game.bus.on('combat:player:eliminated', () => this._syncPrompt(null)),
+    ];
+    this._syncLoadout();
 
     this.setVisible(this.shouldStartVisible());
 
@@ -158,6 +217,46 @@ export class TouchControls {
       this.paused = false;
       this._applyVisibility();
     });
+  }
+
+  /**
+   * Contextual pickup/swap button. It only appears when something is actually in
+   * reach, and it says what it will do ("Pick up", "Swap", "Full").
+   */
+  _syncPrompt(prompt) {
+    this.prompt = prompt;
+    if (!this.interactButton) return;
+    const visible = Boolean(prompt) && prompt.action !== 'full';
+    this.interactButton.classList.toggle('touch--hidden', !visible);
+    if (!visible) return;
+    const label = prompt.action === 'swap' ? 'Swap' : 'Pick up';
+    if (this.interactButton.textContent !== label) this.interactButton.textContent = label;
+    this.interactButton.title = prompt.name ?? '';
+  }
+
+  /** Quick-use buttons mirror the inventory: label + availability. */
+  _syncLoadout() {
+    const inventory = this.game?.services?.get('inventory');
+    if (!inventory) return;
+    for (let i = 0; i < this.itemButtons.length; i += 1) {
+      const stack = inventory.inventory.consumableAt(i);
+      const button = this.itemButtons[i];
+      button.classList.toggle('touch--hidden', !stack);
+      if (!stack) continue;
+      const name = inventory.inventory.lookup(stack.itemId)?.shortName ?? stack.itemId;
+      const label = `${name} x${stack.quantity}`;
+      if (button.textContent !== label) button.textContent = label;
+    }
+  }
+
+  /** Per-frame: only the convert affordance changes over time. */
+  update() {
+    const vitals = this.game?.services?.get('vitals');
+    if (!vitals || !this.convertButton) return;
+    const available = vitals.converting || vitals.canConvert;
+    this.convertButton.classList.toggle('touch--hidden', !available);
+    const label = vitals.converting ? 'Stop' : 'EP→HP';
+    if (this.convertButton.textContent !== label) this.convertButton.textContent = label;
   }
 
   /** Device-based default visibility, honouring an explicit override. */
@@ -306,9 +405,12 @@ export class TouchControls {
     this.input.release(STICK_SOURCE, InputActions.SPRINT);
     this.input.release(STICK_SOURCE, InputActions.PRIMARY);
     this.input.release(STICK_SOURCE, InputActions.AIM);
+    this._syncPrompt(null);
   }
 
   dispose() {
+    for (const off of this._unsubscribe ?? []) off();
+    this._unsubscribe = [];
     this._resetInputs();
     removeElement(this.root);
   }

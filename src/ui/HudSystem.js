@@ -52,16 +52,22 @@ export class HudSystem {
       ? [
           'Left: move',
           'Right: look',
-          '<b>Fire</b> / <b>Jump</b> / <b>Aim</b> / <b>Run</b> / <b>Reload</b> buttons',
+          '<b>Fire</b> / <b>Jump</b> / <b>Aim</b> / <b>Run</b> / <b>Reload</b>',
+          '<b>Pick up</b> appears near loot',
+          '<b>Swap</b> / <b>Drop</b> / <b>EP&rarr;HP</b>',
         ].join(' &middot; ')
       : [
           '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move',
           '<kbd>Shift</kbd> sprint',
           '<kbd>Space</kbd> jump',
-          '<kbd>Mouse</kbd> fire (click the view to capture)',
+          '<kbd>Mouse</kbd> fire',
           '<kbd>RMB</kbd> aim',
           '<kbd>R</kbd> reload',
-          '<kbd>Wheel</kbd> zoom',
+          '<kbd>E</kbd> pick up',
+          '<kbd>X</kbd> swap',
+          '<kbd>G</kbd> drop',
+          '<kbd>1</kbd>-<kbd>4</kbd> items',
+          '<kbd>C</kbd> EP&rarr;HP',
           '<kbd>F3</kbd> debug',
           '<kbd>Esc</kbd> menu',
         ].join(' &middot; ');

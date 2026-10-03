@@ -3,8 +3,11 @@ import { clamp } from '../utils/math.js';
 import { COMBAT } from '../config/settings.js';
 
 /**
- * Combat HUD: reticle, health, ammo, reload indicator, hit markers, damage
- * feedback and the elimination banner.
+ * Combat HUD: reticle, ammo, reload indicator, hit markers, damage feedback and
+ * the elimination banner.
+ *
+ * Vital signs (HP/EP) and the loadout live in `InventoryHud`; this HUD owns the
+ * shooting feedback only, which keeps the two screens independent.
  *
  * It is a *pure observer*: it reads the combat service and listens to bus events,
  * and never writes gameplay state. That means the HUD can be replaced (a mobile
@@ -66,17 +69,6 @@ export class CombatHud {
       this.hitMarker,
     ]);
 
-    // --- vitals (bottom left) --------------------------------------------
-    this.healthValue = createElement('span', { className: 'vitals__value', text: '100' });
-    this.healthFill = createElement('div', { className: 'vitals__fill' });
-    this.vitals = createElement('div', { className: 'vitals' }, [
-      createElement('div', { className: 'vitals__row' }, [
-        createElement('span', { className: 'vitals__label', text: 'Health' }),
-        this.healthValue,
-      ]),
-      createElement('div', { className: 'vitals__bar' }, [this.healthFill]),
-    ]);
-
     // --- ammo (bottom right) ---------------------------------------------
     this.weaponName = createElement('div', { className: 'ammo__name', text: 'RIFLE' });
     this.ammoMag = createElement('span', { className: 'ammo__mag', text: '30' });
@@ -104,7 +96,6 @@ export class CombatHud {
     return createElement('div', { className: 'combat-hud' }, [
       this.damageVignette,
       this.reticle,
-      this.vitals,
       this.ammo,
       this.banner,
     ]);
@@ -114,7 +105,7 @@ export class CombatHud {
 
   update(dt) {
     const combat = this.combat;
-    if (!combat?.weapon) return;
+    if (!combat) return;
 
     // --- reticle: gap follows the live spread ----------------------------
     const spread = combat.spread;
@@ -123,26 +114,12 @@ export class CombatHud {
     this._setStyle(this.reticle, '--gap', `${(spreadPx * (1 - aiming * 0.6)).toFixed(1)}px`);
     this._setStyle(this.reticle, 'opacity', combat.isEliminated ? '0.25' : aiming > 0.5 ? '1' : '0.85');
 
-    // --- vitals ----------------------------------------------------------
-    const health = Math.round(combat.health);
-    this._setText(this.healthValue, String(health));
-    const fraction = combat.healthFraction;
-    this._setStyle(this.healthFill, 'transform', `scaleX(${fraction.toFixed(3)})`);
-    this._setStyle(
-      this.healthFill,
-      'background',
-      fraction > 0.55 ? 'linear-gradient(90deg,#4ef0c8,#7ff5d8)'
-        : fraction > 0.25 ? 'linear-gradient(90deg,#ffc95c,#ffe0a0)'
-          : 'linear-gradient(90deg,#ff5f5f,#ff9a8a)',
-    );
-    this._setClass(this.vitals, 'vitals--critical', fraction <= 0.25);
-
-    // --- ammo ------------------------------------------------------------
+    // --- ammo (works unarmed: the loot flow starts with empty hands) ------
     const ammo = combat.ammo;
-    this._setText(this.weaponName, combat.weapon.name.toUpperCase());
+    this._setText(this.weaponName, combat.weapon ? combat.weapon.name.toUpperCase() : 'UNARMED');
     this._setText(this.ammoMag, String(ammo.magazine));
     this._setText(this.ammoReserve, `/ ${ammo.reserve}`);
-    this._setClass(this.ammoMag, 'ammo__mag--low', ammo.magazine <= Math.max(3, ammo.magazineSize * 0.2));
+    this._setClass(this.ammoMag, 'ammo__mag--low', ammo.magazineSize > 0 && ammo.magazine <= Math.max(3, ammo.magazineSize * 0.2));
     this._setStyle(this.reloadBar, 'transform', `scaleX(${ammo.reloadProgress.toFixed(3)})`);
     this._setText(this.kills, `KILLS ${combat.kills}`);
 

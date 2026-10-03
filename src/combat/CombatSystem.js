@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { COMBAT, HEALTH, PLAYER } from '../config/settings.js';
+import { COMBAT, EP, HEALTH, PLAYER } from '../config/settings.js';
 import { Health } from './Health.js';
+import { Vitals } from './Vitals.js';
 import { Damageable } from './Damageable.js';
 import { applySpread, pointAt, traceShot } from './Hitscan.js';
 import { Random } from '../utils/rng.js';
@@ -10,6 +11,12 @@ import { WeaponView } from './weapons/WeaponView.js';
 
 /**
  * The combat system: one weapon in hand, one damageable body of our own.
+ *
+ * Phase B: the player *starts unarmed* and every weapon comes from the world
+ * loot (`InventorySystem` calls `equipWeapon()` with a live `Weapon` instance).
+ * The system therefore treats "no weapon" as a normal state: firing, spread and
+ * ammo all report zero and none of the loot/inventory code has to special case
+ * anything here.
  *
  * Structure (this is what makes more weapons cheap to add):
  *   - `Weapon`      pure state machine (magazine, reload, cooldown, spread)
@@ -35,19 +42,23 @@ export class CombatSystem {
   constructor({
     config = COMBAT,
     healthConfig = HEALTH,
-    weaponId = 'rifle',
+    epConfig = EP,
+    /** Leave null for the loot-driven flow; pass an id to spawn armed (tests). */
+    weaponId = null,
     seed = 'last-zone-01',
     weaponFactory = createWeapon,
   } = {}) {
     this.name = 'combat';
     this.config = config;
     this.healthConfig = healthConfig;
+    this.epConfig = epConfig;
     this.startingWeaponId = weaponId;
     this.weaponFactory = weaponFactory;
     this.random = new Random(`${seed}:combat`);
 
     this.weapon = null;
     this.weaponView = null;
+    this.vitals = null;
     this.playerHealth = null;
     this.playerDamageable = null;
 
@@ -75,8 +86,15 @@ export class CombatSystem {
     this.targets = game.services.get('targets');
     this.effects = game.services.get('combatEffects');
 
-    // --- the player's own body -------------------------------------------
-    this.playerHealth = new Health({ max: this.healthConfig.playerMax });
+    // --- the player's own vitals ------------------------------------------
+    // Vitals owns HP *and* EP (max 200 / 300, 1 EP = 1 HP, conversion 1 EP/s).
+    this.vitals = new Vitals({
+      maxHealth: this.healthConfig.playerMax,
+      maxEnergy: this.epConfig.max,
+      hpPerEnergy: this.epConfig.hpPerEnergy,
+      conversionRate: this.epConfig.conversionRate,
+    });
+    this.playerHealth = this.vitals.health;
     this.playerHealth.on('damaged', ({ applied, health, meta }) => {
       this.stats.damageTaken += applied;
       this.bus.emit('combat:player:hurt', { amount: applied, health, max: this.playerHealth.max, meta });
@@ -94,11 +112,14 @@ export class CombatSystem {
       kind: 'player',
       owner: this,
     });
+    game.services.register('vitals', this.vitals);
     game.services.register('playerHealth', this.playerHealth);
     game.services.register('playerDamageable', this.playerDamageable);
 
     // --- the weapon -------------------------------------------------------
-    this.equipWeapon(this.startingWeaponId);
+    // Unarmed by default: the first weapon comes from a world pickup. Tests and
+    // future modes can still request a starting weapon explicitly.
+    if (this.startingWeaponId) this.equipWeapon(this.startingWeaponId);
 
     // --- reactions --------------------------------------------------------
     this._unsubscribe = [
@@ -109,19 +130,28 @@ export class CombatSystem {
 
     // Spawn protection so a fresh spawn is not instantly punished.
     this.protectionTimer = this.healthConfig.spawnProtection;
-    this.bus.emit('combat:ready', { weapon: this.weapon.id, health: this.playerHealth.current });
+    this.bus.emit('combat:ready', {
+      weapon: this.weapon?.id ?? null,
+      health: this.playerHealth.current,
+      energy: this.vitals.energy,
+    });
   }
 
   /**
-   * Puts a weapon in the player's hands. Adding weapon switching later means
-   * calling this again (the old view is disposed) - the rest of the system does
-   * not care how many weapons exist.
+   * Puts a weapon in the player's hands.
+   *
+   * @param {string|import('./weapons/Weapon.js').Weapon} weaponOrId a weapon id
+   *        (a fresh instance is built) or a live `Weapon` from the inventory -
+   *        which is how the loot flow preserves magazine state across a swap.
    */
-  equipWeapon(weaponId, overrides = {}) {
+  equipWeapon(weaponOrId, overrides = {}) {
     this.weaponView?.dispose();
     this.weapon?.events.clear();
 
-    this.weapon = this.weaponFactory(weaponId, overrides);
+    this.weapon = typeof weaponOrId === 'string'
+      ? this.weaponFactory(weaponOrId, overrides)
+      : weaponOrId;
+    if (!this.weapon) return null;
     this.weapon.on('fired', (payload) => this._onWeaponFired(payload));
     this.weapon.on('dry', () => this.weapon.startReload());
     this.weapon.on('reload:start', (payload) =>
@@ -142,6 +172,23 @@ export class CombatSystem {
     return this.weapon;
   }
 
+  /** Empty hands: no weapon, no view. Used when the last slot is dropped. */
+  unequipWeapon() {
+    if (!this.weapon && !this.weaponView) return false;
+    this.weaponView?.dispose();
+    this.weaponView = null;
+    this.weapon?.events.clear();
+    this.weapon = null;
+    this.aiming = false;
+    this.aimBlend = 0;
+    this.bus.emit('weapon:equip', { weapon: null, name: 'Unarmed' });
+    return true;
+  }
+
+  get isArmed() {
+    return Boolean(this.weapon);
+  }
+
   // ------------------------------------------------------------- accessors --
 
   get health() {
@@ -157,11 +204,20 @@ export class CombatSystem {
   }
 
   get ammo() {
-    return this.weapon.ammo;
+    return this.weapon?.ammo ?? EMPTY_AMMO;
   }
 
   get isReloading() {
-    return this.weapon.isReloading;
+    return this.weapon?.isReloading ?? false;
+  }
+
+  /** Current EP (0..300). Never regenerates passively. */
+  get energy() {
+    return this.vitals.energy;
+  }
+
+  get maxEnergy() {
+    return this.vitals.maxEnergy;
   }
 
   get isEliminated() {
@@ -177,6 +233,7 @@ export class CombatSystem {
   }
 
   get spread() {
+    if (!this.weapon) return UNARMED_SPREAD;
     return this.weapon.spreadAt({
       aiming: this.aiming,
       moving: Boolean(this.player.state?.moving),
@@ -193,15 +250,16 @@ export class CombatSystem {
   fixedUpdate(dt) {
     const intent = this.input?.intent;
 
+    this.vitals.update(dt);
     this._updateAim(dt, intent);
     this._updateProtection(dt);
-    this.weapon.update(dt);
+    this.weapon?.update(dt);
     this._updateFiring(intent);
     this._updateControllerState();
   }
 
   _updateAim(dt, intent) {
-    const wantsAim = !this.eliminated && Boolean(intent?.aimHeld);
+    const wantsAim = !this.eliminated && this.isArmed && Boolean(intent?.aimHeld);
     this.aiming = wantsAim;
     const target = wantsAim ? 1 : 0;
     const lambda = this.config.aim.transitionLambda;
@@ -216,7 +274,7 @@ export class CombatSystem {
   }
 
   _updateFiring(intent) {
-    if (this.eliminated) return;
+    if (this.eliminated || !this.weapon) return;
     if (intent?.reloadPressed) this.weapon.startReload();
 
     const wanted = this.weapon.type.automatic
@@ -238,7 +296,7 @@ export class CombatSystem {
     const controller = this.player.controller;
     if (!controller) return;
 
-    const aiming = this.aiming && !this.eliminated;
+    const aiming = this.aiming && !this.eliminated && this.isArmed;
     controller.aimMode = aiming;
     controller.speedScale = aiming ? this.config.aim.moveSpeedScale : 1;
   }
@@ -248,8 +306,8 @@ export class CombatSystem {
     this.cameraSystem?.setAim?.(this.aimBlend);
     this.weaponView?.update(dt, {
       aiming: this.aiming,
-      reloading: this.weapon.isReloading,
-      reloadProgress: this.weapon.reloadProgress,
+      reloading: this.weapon?.isReloading ?? false,
+      reloadProgress: this.weapon?.reloadProgress ?? 1,
       moving: Boolean(controller?.state.moving),
     });
     this.characterView?.alignWeaponSupport?.();
@@ -367,7 +425,12 @@ export class CombatSystem {
   }
 
   healPlayer(amount) {
-    return this.playerHealth.heal(amount);
+    return this.vitals.heal(amount);
+  }
+
+  /** EP from a consumable - capped at 300 by Vitals. */
+  addEnergy(amount) {
+    return this.vitals.addEnergy(amount);
   }
 
   _applyFallDamage(landingSpeed) {
@@ -384,7 +447,10 @@ export class CombatSystem {
     this.eliminated = true;
     this.aiming = false;
     this.aimBlend = 0;
-    this.weapon.cancelReload();
+    // Permanent: nothing below re-enables control, re-arms a weapon or resets
+    // vitals. There is no respawn path anywhere in the codebase.
+    this.weapon?.cancelReload();
+    this.vitals.stopConversion('eliminated');
 
     // Stop dead: zero the momentum so the body does not slide.
     this.player.velocity?.set(0, 0, 0);
@@ -403,3 +469,15 @@ export class CombatSystem {
     this.weapon?.events.clear();
   }
 }
+
+/** Ammo readout while unarmed - keeps the HUD/tests free of null checks. */
+export const EMPTY_AMMO = Object.freeze({
+  magazine: 0,
+  reserve: 0,
+  magazineSize: 0,
+  reloading: false,
+  reloadProgress: 1,
+});
+
+/** Fists read as a wide, honest cone rather than a laser. */
+export const UNARMED_SPREAD = 0.02;

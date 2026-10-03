@@ -28,6 +28,9 @@ export class DebugOverlay {
     this.camera = game.services.get('camera3p');
     this.combat = game.services.get('combat');
     this.targets = game.services.get('targets');
+    this.vitals = game.services.get('vitals');
+    this.loot = game.services.get('loot');
+    this.inventory = game.services.get('inventory');
 
     this.content = createElement('div', { className: 'hud__debug' });
     this.root = createElement('div', {}, [this.content]);
@@ -85,18 +88,42 @@ export class DebugOverlay {
     ];
 
     const combat = this.combat;
-    if (combat?.weapon) {
+    if (combat) {
       const ammo = combat.ammo;
       const stats = combat.stats;
+      const weaponLabel = combat.weapon
+        ? `${combat.weapon.name}  ${ammo.magazine}/${ammo.reserve}${ammo.reloading ? '  RELOADING' : ''}`
+        : 'unarmed - find a weapon crate';
       lines.push(
         '',
-        `<b>${combat.weapon.name}</b>  ${ammo.magazine}/${ammo.reserve}${ammo.reloading ? '  RELOADING' : ''}`,
-        `hp ${combat.health.toFixed(0)}/${combat.maxHealth}  ${combat.isEliminated ? 'ELIMINATED' : combat.isProtected ? 'spawn-protected' : 'alive'}`,
+        `<b>${weaponLabel}</b>`,
+        `hp ${combat.health.toFixed(0)}/${combat.maxHealth}  ep ${(this.vitals?.energy ?? 0).toFixed(0)}/${this.vitals?.maxEnergy ?? 0}`
+          + `  ${this.vitals?.converting ? 'CONVERTING' : ''}`,
+        `${combat.isEliminated ? 'ELIMINATED' : combat.isProtected ? 'spawn-protected' : 'alive'}`,
         `spread ${(combat.spread * 1000).toFixed(1)}mrad  aim ${combat.aimBlend.toFixed(2)}  recoil ${this.camera?.recoil?.pitch?.toFixed(4) ?? '-'}`,
         `shots ${stats.shots}  hits ${stats.hits}  head ${stats.headshots}  kills ${stats.kills}`,
         `damage dealt ${stats.damageDealt.toFixed(0)}  taken ${stats.damageTaken.toFixed(0)}`,
         `targets ${this.targets?.aliveCount ?? 0}/${this.targets?.dummies.length ?? 0} standing`,
       );
+    }
+
+    const loot = this.loot;
+    const inventory = this.inventory?.inventory;
+    if (loot) {
+      const prompt = this.inventory?.prompt;
+      lines.push(
+        '',
+        `loot ${loot.stats.pickups} pickups  ${loot.stats.anchors} anchors  ${loot.pickups.filter((p) => p.active).length} live`,
+        `nearby ${prompt ? `${prompt.name} (${prompt.label})` : '—'}`,
+      );
+      if (inventory) {
+        lines.push(
+          `slots ${inventory.weapons.map((w) => (w ? w.id : '—')).join(' | ')}`
+            + `  ammo ${[...inventory.ammo.entries()].map(([type, count]) => `${type}:${count}`).join(' ') || '0'}`,
+          `items ${inventory.consumables.map((stack) => `${stack.itemId} x${stack.quantity}`).join(', ') || '—'}`
+            + `  ${this.inventory?.using ? `using ${this.inventory.usingItemId}` : ''}`,
+        );
+      }
     }
 
     const next = lines.join('\n');

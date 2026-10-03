@@ -4,9 +4,10 @@
 
 **A single-player 3D battle royale built with Three.js.**
 
-Current build: renderer, procedural world, third-person controller, a device-agnostic input layer
-and a **third-person combat prototype** (one rifle, hitscan, ammo, reload, health, elimination and
-training dummies) — playable in the browser **and as a signed Android APK**.
+Current build: renderer, 4x4 km procedural island, third-person controller, a device-agnostic
+input layer, **hitscan combat**, and a full **loot + inventory + HP/EP loop** (weapon and
+ammunition pickups, mushroom/inhaler consumables, 200 HP over 300 EP with a 1:1 conversion) —
+playable in the browser **and as a signed Android APK**.
 
 `npm install` → `npm run dev` → open the printed URL → press **Deploy**.
 Android: `npm run android:apk`, or let CI build it (see [Android APK](#android-apk)).
@@ -18,9 +19,8 @@ Android: `npm run android:apk`, or let CI build it (see [Android APK](#android-a
 ## What this build is
 
 This is a **playable prototype**, not a finished match. It ships a world you can
-run, jump and shoot in, plus the architecture that further weapons, loot,
-inventory, the shrinking zone, a lobby and (later) multiplayer plug into without
-a rewrite.
+run, jump, loot and shoot in, plus the architecture that the shrinking zone, a
+lobby, bots and (later) multiplayer plug into without a rewrite.
 
 **Included**
 
@@ -32,16 +32,19 @@ a rewrite.
 | Camera | Damped orbit camera with collision (never clips through the ground or walls), zoom, sprint FOV kick |
 | Character | Stylised humanoid assembled from primitives with a hand-authored rig (walk cycle, sprint lean, air pose, landing squash) |
 | Combat | Data-driven rifle (automatic, 8.5 rps, 30-round magazine), hitscan hit detection against actors *and* world geometry, damage falloff, headshots, spread that reacts to movement/aim/sustained fire, recoil that kicks the camera, tracers, muzzle flash and bullet impacts |
+| Loot | Data-driven loot tables rolled into physical, pickable world entities: weapons, 5.56mm ammo and consumables spawn inside enterable buildings, at supply crates, landmarks and the arrival plaza — 183 validated anchors / ~320 pickups on the shipped island, drawn with **14 instanced meshes** in total |
+| Inventory | Two weapon slots (magazine state survives a swap), a shared per-ammo-type pool, ordered consumable stacks, and armor/attachment/cosmetic containers already wired for later phases |
+| Vitals | **200 max HP over 300 max EP**: EP never regenerates on its own, 1 EP converts into 1 HP at 1 EP/s (player triggered), mushroom restores EP only, inhaler restores HP + EP over an interruptible 3.2s channel |
 | Health | A reusable `Health` pool + `Damageable` hitboxes: player and dummies share one code path; fall damage, spawn protection and an elimination state that locks control |
 | Targets | Eight training dummies around the arena with health bars, hit flashes, a fall-over death and automatic rebuild |
 | Input | One `intent` object fed by keyboard, mouse (pointer lock *or* drag fallback) and multi-touch controls - gameplay never knows which device is talking |
-| UI | Deploy/pause menu, dynamic reticle that tracks weapon spread, health/ammo/reload readouts, hit markers, damage vignette, elimination banner, adaptive control hints, on-screen touch stick + fire/jump/aim/run/reload/pause buttons, F3 debug overlay |
-| Engineering | Fixed-timestep simulation decoupled from rendering, service registry, event bus, 101 automated tests (world, movement, combat, Android shell integration, and end-to-end boot + combat playthroughs under jsdom) |
+| UI | Deploy/pause menu, dynamic reticle that tracks weapon spread, HP/EP bars with the conversion state, weapon/consumable loadout, contextual pickup prompt, consumption progress, hit markers, damage vignette, elimination banner, adaptive control hints, on-screen touch stick + fire/jump/aim/run/reload/**pick up**/swap/drop/**use item**/EP→HP/pause buttons, F3 debug overlay |
+| Engineering | Fixed-timestep simulation decoupled from rendering, service registry, event bus, 158 automated tests (world, movement, combat, loot, inventory, Android shell integration, and end-to-end boot/loot/combat playthroughs under jsdom) |
 | Android | The same production bundle wrapped with Capacitor: landscape immersive fullscreen, keep-awake, back-button pause, adaptive launcher icon and splash, release signing through CI secrets (see [Android APK](#android-apk)) |
 
 **Not included yet** (by design, so the build stays reviewable):
-further weapons, loot, inventory, the shrinking zone, bots, match flow,
-audio, and **no multiplayer of any kind**. There are no stubs or dead
+the shrinking zone, the 15-minute match flow, the initial drop, spectating,
+bots, audio, and **no multiplayer of any kind**. There are no stubs or dead
 placeholder systems for those - the extension points are real and documented
 below.
 
@@ -87,7 +90,7 @@ No gameplay code is forked, simplified or replaced for Android.
 
 | Concern | How it is handled |
 | --- | --- |
-| App identity | Label **LAST ZONE**, application ID / namespace `com.lastzone.game`, `versionName` 0.2.0 (`versionCode` 2) |
+| App identity | Label **LAST ZONE**, application ID / namespace `com.lastzone.game`, `versionName` 0.3.0 (`versionCode` 3) |
 | Screen | `sensorLandscape`, immersive fullscreen (system bars hidden, swipe to reveal transiently), `resizeableActivity="false"`, cutout/edge-to-edge insets respected |
 | Power | `FLAG_KEEP_SCREEN_ON` while the game is in the foreground |
 | Back gesture | Pauses the match through the existing menu; a second Back from the pause menu exits |
@@ -210,6 +213,11 @@ naming the missing secret(s) - it never falls back to an unsigned or debug build
 | **Fire** | **Left mouse button** (hold for automatic fire) or `F` |
 | **Aim down sights** | **Right mouse button** (hold) or `Q` |
 | **Reload** | `R` (also happens automatically when the magazine runs dry) |
+| **Pick up / swap loot** | `E` - walk up to a crate and the prompt appears |
+| **Swap weapon slot** | `X` |
+| **Drop weapon** | `G` (the weapon lands in front of you as a real pickup) |
+| **Use consumable** | `1` `2` `3` `4` - one key per consumable stack, in pickup order |
+| **EP → HP conversion** | `C` (start/stop the 1 EP/s conversion) |
 | Look without a mouse | `I` `K` pitch, `J` `L` yaw |
 | Zoom | Mouse wheel |
 | Pause / menu | `Esc` |
@@ -235,6 +243,10 @@ drag.
 | **Reload** | `Reload` button (tap) |
 | Jump | `Jump` button (hold to jump again on landing) |
 | Sprint | `Run` button (tap to toggle) |
+| **Pick up / swap** | **`Pick up` button** - it only appears when something is in reach, and turns into `Swap` when both weapon slots are full |
+| Swap / drop weapon | `Swap` / `Drop` buttons |
+| **Use consumable** | One button per consumable stack, labelled with the item and its count |
+| EP → HP conversion | `EP→HP` button (appears while EP can be converted) |
 | Pause | ⏸ button, top right |
 
 The touch pad hides itself when keyboard/mouse input is used and reappears when
@@ -271,6 +283,8 @@ LAST-ZONE/
 │   │   ├── CombatSystem.js    # the glue: intent -> weapon -> trace -> damage -> events
 │   │   ├── Hitscan.js         # pure ray/shape hit detection (no three.js)
 │   │   ├── Health.js          # reusable hit-point pool with events
+│   │   ├── Vitals.js          # HP + EP: 200 / 300, 1 EP = 1 HP, 1 EP/s conversion
+│   │   ├── ConsumableUse.js   # interruptible consumable channel (instant / gradual)
 │   │   ├── Damageable.js      # id + live position + cylinder hitbox + health
 │   │   ├── Target.js          # training dummies + the target system
 │   │   ├── CombatEffects.js   # pooled tracers, muzzle flash, impacts
@@ -279,6 +293,16 @@ LAST-ZONE/
 │   │       ├── WeaponTypes.js # registry: definitions -> weapon instances
 │   │       ├── WeaponModels.js# procedural weapon meshes (+ `muzzle` node)
 │   │       └── WeaponView.js  # hip/aim/recoil posing on the character
+│   ├── loot/
+│   │   ├── LootSystem.js      # world pickups: anchors -> entities, spatial hash, instancing
+│   │   ├── LootTables.js      # what each kind of place can contain (weights, rolls)
+│   │   ├── LootVisuals.js     # the instanced pickup models (one InstancedMesh per part)
+│   │   └── items/
+│   │       ├── ItemData.js    # ammo, mushroom, inhaler + future armor/attachment/cosmetic
+│   │       └── ItemRegistry.js# one id space for both items and weapons
+│   ├── inventory/
+│   │   ├── Inventory.js       # pure data: weapon slots, ammo pool, consumable stacks
+│   │   └── InventorySystem.js # the glue: intent -> pickup/drop/use/convert -> HUD events
 │   ├── physics/Collider.js    # oriented boxes, cylinders, height field, push-out
 │   ├── world/
 │   │   ├── Terrain.js         # analytic height field + vertex-coloured mesh
@@ -300,7 +324,8 @@ LAST-ZONE/
 │   │   ├── LoadingScreen.js   # boot overlay + shader warm-up
 │   │   ├── MenuSystem.js      # deploy/pause menu
 │   │   ├── HudSystem.js       # brand mark + adaptive control hints
-│   │   ├── CombatHud.js       # reticle, health, ammo, hit markers, banner
+│   │   ├── CombatHud.js       # reticle, ammo, hit markers, damage vignette, banner
+│   │   ├── InventoryHud.js    # HP/EP bars, loadout, pickup prompt, use progress
 │   │   └── DebugOverlay.js    # F3 readout (movement + combat telemetry)
 │   ├── platform/
 │   │   └── nativeApp.js       # Capacitor shell glue (Android back button); inert on the web
@@ -393,6 +418,49 @@ Two decisions worth knowing:
 * **The player is a `Damageable` too.** Bot weapons (later) can shoot the player
   through exactly the same code path this build uses for dummies.
 
+### Loot, inventory and vitals
+
+Loot is data all the way down. The world says *where* ("a military building
+interior"), the loot tables say *what* ("6 weight rifle, 30-60 rounds of 5.56,
+an inhaler"), and the systems only ever read definitions:
+
+```
+ world/IslandMap.js      building interiors, supply crates, landmarks  -> anchors
+        |
+        v
+ loot/LootTables.js      anchor kind -> weighted table, rolled with a per-anchor seed
+        |
+        v
+ loot/LootSystem.js      physical pickups, spatial hash, instanced meshes, drops
+        |
+        v
+ inventory/Inventory.js  weapon slots | ammo pool | consumable stacks | future items
+        |
+        v
+ inventory/InventorySystem.js   intent -> pickup / swap / drop / use / convert
+        |
+        +--> CombatSystem.equipWeapon(weapon)   live Weapon instances keep magazines
+        +--> combat/Vitals.js                   HP 200 / EP 300, 1 EP = 1 HP, 1 EP/s
+        +--> ui/InventoryHud.js                 bars, loadout, prompt, channel progress
+```
+
+Locked Phase B numbers (all in `config/settings.js`, all unit tested):
+
+| Value | Setting |
+| --- | --- |
+| Max HP | `HEALTH.playerMax = 200` |
+| Max EP | `EP.max = 300` |
+| EP → HP | `EP.hpPerEnergy = 1` (1 EP is 1 HP) |
+| Conversion | `EP.conversionRate = 1` EP/second, player triggered (`C`), stops at 200 HP or 0 EP |
+| Ammo pool | `AMMO_TYPES['556'].maxCarry = 300` |
+| Inventory | `INVENTORY.weaponSlots = 2`, `consumableSlots = 4` |
+
+Item values live in `src/loot/items/ItemData.js` (mushroom: +40 EP, EP only;
+inhaler: +60 HP and +45 EP over an interruptible 3.2 s channel) so they can be
+rebalanced without touching a system. Adding a weapon is still a `WEAPONS` entry;
+it becomes lootable automatically because the registry resolves weapon ids
+through the same id space as items.
+
 ### Adding a weapon
 
 1. Add an entry to `WEAPONS` in `src/config/settings.js`:
@@ -411,10 +479,14 @@ Two decisions worth knowing:
    ```
 2. (Optional) add a builder for a new `model` in `combat/weapons/WeaponModels.js`
    that returns a group with a child named `muzzle`.
-3. Call `combat.equipWeapon('shotgun')` - for example from a future loot pickup.
+3. Add it to a loot table in `src/loot/LootTables.js` (or call
+   `inventory.addWeapon(createWeapon('shotgun'))` directly). The weapon id is
+   lootable the moment it is registered.
 
 That is the whole change; `tests/combat-e2e.test.js` proves it by registering and
-firing a brand new weapon without touching a single combat source file.
+firing a brand new weapon without touching a single combat source file, and
+`tests/inventory.test.js` proves the new weapon is picked up by the loot id space
+automatically.
 
 ### World generation
 
@@ -435,7 +507,7 @@ the same map. `config/settings.js` exposes the noise scales and amplitudes.
 Everything lives in **`src/config/settings.js`**:
 
 ```js
-WORLD.size          // 420m square map
+WORLD.size          // 4.6km height field, ~4km playable island
 PLAYER.walkSpeed    // 5.2 m/s
 PLAYER.sprintSpeed  // 8.4 m/s
 PLAYER.jumpSpeed    // 7.2 m/s  (apex ~1.08m, flight ~0.6s)
@@ -446,10 +518,17 @@ BINDINGS            // key code -> action table (remappable at runtime)
 QUALITY.desktop / QUALITY.mobile   // pixel ratio, shadow map, prop counts
 
 WEAPONS.rifle       // damage, fire rate, magazine, reload, spread, recoil, model
-HEALTH              // player max health, fall damage, spawn protection
+HEALTH              // player max HP (200), fall damage, spawn protection
+EP                  // max EP (300), 1 EP = 1 HP, conversion rate, auto-convert flag
+INVENTORY           // weapon/consumable slot counts, future containers
+LOOT                // interaction radius, instance headroom, pickup cap, animation budget
 COMBAT              // range, falloff, recoil ceiling, effect lifetimes, aim feel
 TARGETS             // how many training dummies, where, how tough
 ```
+
+Item balance (mushroom EP, inhaler HP/EP/duration, ammo pickup sizes, stack
+limits) lives in `src/loot/items/ItemData.js`; loot distribution per location
+kind lives in `src/loot/LootTables.js`.
 
 Quality is picked from the device (`?quality=mobile|desktop` forces one).
 Launch flags: `?debug=1` opens the F3 overlay immediately, `?touch=1|0` forces
@@ -463,6 +542,17 @@ the touch pad on or off.
 npm test
 ```
 
+* `tests/inventory.test.js` - the locked Phase B values (200 HP, 300 EP, 1 EP =
+  1 HP, 1 EP/s, conversion stopping at both caps), the inventory model (slots,
+  ammo pools, consumable stacks, future containers), the consumable channel
+  (mushroom, inhaler, interrupts) and the loot table weights/determinism.
+* `tests/loot.test.js` - the loot world entity layer against a stub world:
+  anchor validation, the arrival-plaza kit, instanced rendering budgets, the
+  spatial hash, pickup/drop and instance-slot recycling, layout determinism.
+* `tests/loot-e2e.test.js` - Phase B end to end through the real game: desktop
+  `E` pickup, mobile contextual button, weapon swap/drop, ammo pooling, mushroom
+  and inhaler use with caps, the EP→HP conversion, damage integration and
+  permanent elimination.
 * `tests/world.test.js` - terrain determinism and seeding, arena flatness, map
   boundaries, prop scattering rules, collider push-out (including rotated boxes),
   walkable box tops, spawn validation.
@@ -477,15 +567,15 @@ npm test
 * `tests/game.test.js` - end-to-end: boots the real `createGame()` wiring under
   jsdom with a headless renderer, then drives it with synthetic keyboard and
   pointer events (menu, WASD, sprint, jump, camera drag/zoom, virtual stick,
-  touch look, pause, respawn, debug overlay) and asserts the player never ends up
-  inside geometry.
+  touch look, pause, the no-respawn rule, debug overlay) and asserts the player
+  never ends up inside geometry.
 * `tests/native-app.test.js` - the Android shell integration: the platform check,
   and the back-button policy (pause a live match, exit only from the pause menu)
   exercised through an injected Capacitor `App` plugin, no device required.
 * `tests/combat-e2e.test.js` - combat through the *real* game, using only player
   entry points: pointer-lock mouse fire, `F` key fire, aiming, recoil, reload
   (key + button), auto-reload on empty, fire-rate measurement, headshots,
-  kills and dummy rebuilds, cover, the elimination flow and respawn, the combat
+  kills and dummy rebuilds, cover, the elimination flow and no-respawn rule, the combat
   HUD readouts, mobile fire/aim/reload buttons, and a 20 second soak of mixed
   input that must not throw.
 
@@ -501,11 +591,11 @@ point, not a stub:
 
 | Feature | Where it goes |
 | --- | --- |
-| **More weapons** | Data only: see "Adding a weapon" above. A `Loadout`/`WeaponSystem` would sit next to `CombatSystem` and call `equipWeapon()`. |
+| **More weapons** | Data only: see "Adding a weapon" above - a new `WEAPONS` entry is lootable immediately and takes over a weapon slot through the existing pickup flow. |
 | **Projectiles** | `Weapon.type.kind` is already read from data. A `ProjectileSystem` can reuse `Damageable`, the same damage/event helpers and `CombatEffects` for the trail. |
-| **Loot** | `WorldSystem` already owns runtime map mutation: spawn `LootContainer` objects into `worldGroup`, register their colliders with the same `Collider`, and call `combat.equipWeapon()` / `weapon.addReserve()` on pickup. |
-| **Inventory** | Register an `inventory` service; the HUD mounts its own widget into `#ui-root` and subscribes to its events. `CharacterView` already has a right-hand attach point for held items. |
+| **More loot** | `IslandMap` emits anchors, `LootTables.js` decides contents: a new location kind is one table entry plus one anchor, and a new item is one entry in `ItemData.js`. |
 | **The zone** | New `src/world/ZoneSystem.js` using `lateFixedUpdate` to apply area damage via `combat.damagePlayer()` - the same entry point fall damage uses - and update the fog/light tint through `SceneEnvironment`. |
+| **Armor / attachments** | The item kinds, the inventory containers (`inventory.future`) and the generic loot-pickup path already exist; only the effects and UI are missing. |
 | **Bots** | Give them a `PlayerController`, a `Damageable` and a `Weapon`: hit detection, damage and death already work against any registered damageable. |
 | **Lobby / match flow** | Replace `MenuSystem`'s single `close()` action with a match service that owns spawn selection (`world.sampleSpawn()` already returns validated points) and round timers. |
 | **Multiplayer** | The controller already takes an intent and returns state: feed remote intents into additional `PlayerController` instances (one per peer) and render them with `CharacterView` (its `colors` option exists for team tints). Swap the input source for network snapshots - nothing in movement, camera or rendering assumes a single player. |
@@ -535,12 +625,14 @@ external APIs.
 
 ## Roadmap
 
-1. ~~**Combat**: a weapon, hitscan hit detection, ammo, reload, health, elimination.~~ ✅ *(this build)*
-1b. ~~**Android packaging**: signed release APK via Capacitor + GitHub Actions.~~ ✅ *(this build)*
-2. **Weapon variety**: a second and third weapon (projectiles, shotgun pellets), weapon switching, pickups.
-3. **Loot & inventory**: world spawns, pickups, hotbar, healing items.
-4. **The zone**: shrinking play area with escalating damage and a minimap.
-5. **Match flow**: lobby, drop-in, timer, placement screen.
+1. ~~**Combat**: a weapon, hitscan hit detection, ammo, reload, health, elimination.~~ ✅
+1b. ~~**Android packaging**: signed release APK via Capacitor + GitHub Actions.~~ ✅
+1c. ~~**Loot, inventory and vitals**: world loot, weapon/ammunition pickups, a
+   mobile-friendly loadout, 200 HP over 300 EP with consumables.~~ ✅ *(this build)*
+2. **The zone**: shrinking play area with escalating damage and a minimap.
+3. **Match flow**: initial drop, 15-minute timer, placement screen.
+4. **Weapon variety**: a second and third weapon (projectiles, shotgun pellets).
+5. **Armor / attachments / cosmetics** on the containers that already exist.
 6. **Bots**, then **netcode** (authoritative server, client prediction) on top of
    the intent/state split that already exists.
 
